@@ -113,18 +113,17 @@ def salva_dati(df_to_save):
         spreadsheet = client.open_by_url(spreadsheet_url)
         worksheet = spreadsheet.get_worksheet(0)
 
-        # Pulisce il foglio
+        # Pulisce completamente il foglio
         worksheet.clear()
         
-        # Prepara la lista con le intestazioni e tutte le righe dei dati
-        data_to_write = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        # Prepara la lista di liste (intestazioni + righe)
+        righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         
-        # Scrive tutto sul foglio Google Sheets a partire dalla cella A1
-        worksheet.update("A1", data_to_write)
-        st.success("Dati salvati correttamente su Google Sheets!")
+        # Scrive i dati usando il metodo standard di aggiornamento range
+        worksheet.update(righe)
+        
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
-
 
 df = carica_dati()
 
