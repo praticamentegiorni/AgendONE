@@ -31,6 +31,30 @@ MESI_ITALIANI = {
 def traduci_mese(mese_en):
     return MESI_ITALIANI.get(mese_en, mese_en)
 
+# Parser robusto per date in formato italiano DD/MM/YYYY o ISO YYYY-MM-DD
+def parse_data_italiana(val):
+    if pd.isna(val) or str(val).strip() == "" or str(val).lower() == "none" or str(val).lower() == "nan":
+        return pd.NaT
+    val_str = str(val).strip()
+    
+    # Se la stringa è nel formato ISO YYYY-MM-DD
+    if "-" in val_str and len(val_str.split("-")[0]) == 4:
+        try:
+            return pd.to_datetime(val_str, format="%Y-%m-%d")
+        except:
+            pass
+            
+    # Parsing esplicito formato italiano DD/MM/YYYY o D/M/YYYY
+    try:
+        parti = val_str.split("/")
+        if len(parti) == 3:
+            giorno, mese, anno = int(parti[0]), int(parti[1]), int(parti[2])
+            return datetime.datetime(anno, mese, giorno)
+    except:
+        pass
+        
+    return pd.to_datetime(val_str, errors="coerce", dayfirst=True)
+
 # Funzione per ottenere il client gspread dai secrets di Streamlit
 def get_gspread_client_and_sheet():
     try:
@@ -108,23 +132,13 @@ def carica_dati():
             df = df.rename(columns={"Luogo": "Sede"})
             
         if "Data" in df.columns:
-            # Converte la colonna forzando il formato giorno prima (dayfirst=True) e gestendo gli errori
-            df["Data_dt"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
+            df["Data_dt"] = df["Data"].apply(parse_data_italiana)
             
-            # Se la conversione automatica fallisce per alcune righe formattate come stringhe strane, proviamo un parsing esplicito
-            mask_nat = df["Data_dt"].isna() & df["Data"].notna()
-            if mask_nat.any():
-                df.loc[mask_nat, "Data_dt"] = pd.to_datetime(df.loc[mask_nat, "Data"], errors="coerce", format="%d/%m/%Y")
-
-            # Standardizziamo la colonna Data in formato ISO (YYYY-MM-DD) per l'ordinamento e il backend
             mask_valid = df["Data_dt"].notna()
             df.loc[mask_valid, "Data"] = df.loc[mask_valid, "Data_dt"].dt.strftime("%Y-%m-%d")
-            
-            # Assegnamo il mese corretto basato sulla data effettiva parsata correttamente
             df.loc[mask_valid, "Mese"] = df.loc[mask_valid, "Data_dt"].apply(
                 lambda dt: traduci_mese(dt.strftime("%B")).capitalize()
             )
-            
         return df
     except Exception as e:
         return empty_df
@@ -267,17 +281,10 @@ with tab3:
     if not df.empty:
         df_vis = df.copy()
         if "Data" in df_vis.columns:
-            # Parsing sicuro con dayfirst=True
-            df_vis["Data_dt"] = pd.to_datetime(df_vis["Data"], errors="coerce", dayfirst=True)
-            
-            # Sincronizza mese e crea una colonna data in formato italiano pulito
+            df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
-            
-            # Convertiamo esplicitamente in oggetti datetime.date nativi di Python dove possibile, 
-            # così l'editor di Streamlit non può fare confusioni di formattazione
             df_vis["Data"] = df_vis["Data_dt"].dt.date
             
-            # Riordiniamo le colonne mettendo la Data in prima posizione
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt"]]
             df_vis = df_vis[cols]
 
@@ -408,7 +415,7 @@ with tab3:
 
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
-            df_report["Data_dt"] = pd.to_datetime(df_report["Data"], errors="coerce")
+            df_report["Data_dt"] = df_report["Data"].apply(parse_data_italiana)
 
         if data_inizio_filtro:
             df_report = df_report[df_report["Data_dt"] >= pd.to_datetime(data_inizio_filtro)]
@@ -465,7 +472,8 @@ with tab3:
             st.markdown("### 📋 Elenco Attività in Evidenza")
 
             for _, row in df_report.iterrows():
-                data_formattata = pd.to_datetime(row["Data"], errors="coerce").strftime("%d/%m/%Y") if pd.notnull(row["Data"]) else ""
+                parsed_dt = parse_data_italiana(row["Data"])
+                data_formattata = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row["Data"])
                 classe = str(row["Classe"])
                 sede = str(row["Sede"])
                 modalita = str(row["Modalità"])
@@ -495,7 +503,7 @@ with tab3:
 
             df_csv = df_report.copy()
             if "Data" in df_csv.columns:
-                df_csv["Data"] = pd.to_datetime(df_csv["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+                df_csv["Data"] = df_csv["Data_dt"].dt.strftime("%d/%m/%Y")
 
             colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Classe", "Sede", "Modalità", "Note"]
             esistenti = [c for c in colonne_originali if c in df_csv.columns]
