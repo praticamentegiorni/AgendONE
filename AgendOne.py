@@ -98,21 +98,15 @@ def carica_dati():
         )
 
 
-# Salvataggio e aggiornamento dati su Google Sheets tramite gspread (con debug)
+# Salvataggio e aggiornamento dati su Google Sheets tramite il client nativo della connessione
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
 
     try:
-        creds = conn._secrets["credentials"]
-        spreadsheet_url = conn._secrets["spreadsheet"]
-
-        import gspread
-
-        client = gspread.service_account_from_dict(creds)
-        spreadsheet = client.open_by_url(spreadsheet_url)
-        worksheet = spreadsheet.get_worksheet(0)
-
+        # Ottiene direttamente il worksheet attivo dalla connessione gsheets configurata
+        worksheet = conn.worksheet
+        
         # Pulisce completamente il foglio
         worksheet.clear()
         
@@ -123,9 +117,7 @@ def salva_dati(df_to_save):
         worksheet.update("A1", righe)
         st.success("Dati salvati correttamente su Google Sheets!")
     except Exception as e:
-        # Mostra l'errore tecnico dettagliato a schermo per capire la causa
-        st.error(f"DETTAGLIO ERRORE GSPREAD: {str(e)}")
-        raise e
+        st.error(f"DETTAGLIO ERRORE SALVATAGGIO: {str(e)}")
 
 df = carica_dati()
 
