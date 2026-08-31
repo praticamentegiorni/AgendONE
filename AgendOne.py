@@ -682,7 +682,7 @@ with tab3:
             st.markdown("---")
             st.download_button(
                 label="📥 Scarica Report Filtrato (CSV)",
-                data=df_csv_esportazione.to_csv(index=False).encode("utf-8"),
+                data=df_csv_esportazione.to_csv(index=False, sep=";").encode("utf-8"),
                 file_name="report_orari_filtrato.csv",
                 mime="text/csv",
                 use_container_width=True,
