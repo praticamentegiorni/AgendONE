@@ -98,26 +98,17 @@ def carica_dati():
         )
 
 
-# Salvataggio e aggiornamento dati su Google Sheets tramite il client nativo della connessione
+# Salvataggio e aggiornamento dati su Google Sheets tramite il metodo nativo della connessione
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
 
     try:
-        # Ottiene direttamente il worksheet attivo dalla connessione gsheets configurata
-        worksheet = conn.worksheet
-        
-        # Pulisce completamente il foglio
-        worksheet.clear()
-        
-        # Prepara la lista di liste (intestazioni + righe)
-        righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-        
-        # Scrive i dati
-        worksheet.update("A1", righe)
-        st.success("Dati salvati correttamente su Google Sheets!")
+        # Utilizza la scrittura nativa supportata da st-gsheets-connection
+        conn.update(data=df_to_save)
+        st.success("Appuntamenti salvati con successo su Google Sheets!")
     except Exception as e:
-        st.error(f"DETTAGLIO ERRORE SALVATAGGIO: {str(e)}")
+        st.error(f"Errore di salvataggio: {e}")
 
 df = carica_dati()
 
