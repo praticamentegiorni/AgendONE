@@ -21,13 +21,25 @@ def get_gspread_client_and_sheet():
         gsheets_secrets = st.secrets["connections"]["gsheets"]
         spreadsheet_url = gsheets_secrets["spreadsheet"]
 
-        json_str = gsheets_secrets["text"]
-        creds_dict = json.loads(json_str)
+        # Costruisce il dizionario direttamente dai secrets di Streamlit
+        creds_dict = {
+            "type": gsheets_secrets["type"],
+            "project_id": gsheets_secrets["project_id"],
+            "private_key_id": gsheets_secrets["private_key_id"],
+            "private_key": gsheets_secrets["private_key"],
+            "client_email": gsheets_secrets["client_email"],
+            "client_id": gsheets_secrets["client_id"],
+            "auth_uri": gsheets_secrets["auth_uri"],
+            "token_uri": gsheets_secrets["token_uri"],
+            "auth_provider_x509_cert_url": gsheets_secrets["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": gsheets_secrets["client_x509_cert_url"],
+            "universe_domain": gsheets_secrets["universe_domain"]
+        }
 
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
         
-        # Sostituisci "Foglio1" con il nome esatto della scheda in basso nel tuo file Google Sheets
+        # Sostituisci "Foglio1" con il nome esatto della tua scheda se è diverso
         return spreadsheet.worksheet("Foglio1")
     except Exception as e:
         st.error(f"Errore di autenticazione gspread: {e}")
