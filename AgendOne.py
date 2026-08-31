@@ -267,11 +267,18 @@ with tab3:
     if not df.empty:
         df_vis = df.copy()
         if "Data" in df_vis.columns:
+            # Parsing sicuro con dayfirst=True
             df_vis["Data_dt"] = pd.to_datetime(df_vis["Data"], errors="coerce", dayfirst=True)
-            df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")) if pd.notnull(dt) else "")
-            df_vis["Data_Italiana"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna("")
             
-            cols = ["Data_Italiana"] + [c for c in df_vis.columns if c not in ["Data_Italiana", "Data", "Data_dt"]]
+            # Sincronizza mese e crea una colonna data in formato italiano pulito
+            df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
+            
+            # Convertiamo esplicitamente in oggetti datetime.date nativi di Python dove possibile, 
+            # così l'editor di Streamlit non può fare confusioni di formattazione
+            df_vis["Data"] = df_vis["Data_dt"].dt.date
+            
+            # Riordiniamo le colonne mettendo la Data in prima posizione
+            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt"]]
             df_vis = df_vis[cols]
 
         filtro = st.text_input("🔍 Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
