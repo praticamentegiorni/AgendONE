@@ -107,17 +107,21 @@ def salva_dati(df_to_save):
         creds = conn._secrets["credentials"]
         spreadsheet_url = conn._secrets["spreadsheet"]
 
-        import gserver
         import gspread
 
         client = gspread.service_account_from_dict(creds)
         spreadsheet = client.open_by_url(spreadsheet_url)
         worksheet = spreadsheet.get_worksheet(0)
 
+        # Pulisce il foglio
         worksheet.clear()
-        worksheet.update(
-            [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-        )
+        
+        # Prepara la lista con le intestazioni e tutte le righe dei dati
+        data_to_write = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        
+        # Scrive tutto sul foglio Google Sheets a partire dalla cella A1
+        worksheet.update("A1", data_to_write)
+        st.success("Dati salvati correttamente su Google Sheets!")
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
