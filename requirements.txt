@@ -2,3 +2,6 @@ streamlit
 gspread
 google-auth
 pandas
+streamlit
+pandas
+streamlit-gsheets
