@@ -263,7 +263,7 @@ with tab1:
             val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
             val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
-            if nuova_classe_libera and nueva_classe_libera not in config["classi"]:
+            if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
                 config["classi"].append(nuova_classe_libera)
             if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
                 config["sedi"].append(nuova_sede_libera)
