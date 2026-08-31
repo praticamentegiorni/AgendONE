@@ -17,32 +17,32 @@ CONFIG_FILE = "config_tabelle.json"
 def get_gspread_client_and_sheet():
     try:
         import gspread
+        import toml
 
+        # Legge direttamente la configurazione gsheets dai secrets di Streamlit
         gsheets_secrets = st.secrets["connections"]["gsheets"]
         spreadsheet_url = gsheets_secrets["spreadsheet"]
 
-        # Costruisce il dizionario direttamente dai secrets di Streamlit
+        # Se i secrets sono definiti come singoli campi sparsi, li ricompattiamo in un dizionario
         creds_dict = {
-            "type": gsheets_secrets["type"],
-            "project_id": gsheets_secrets["project_id"],
-            "private_key_id": gsheets_secrets["private_key_id"],
-            "private_key": gsheets_secrets["private_key"],
-            "client_email": gsheets_secrets["client_email"],
-            "client_id": gsheets_secrets["client_id"],
-            "auth_uri": gsheets_secrets["auth_uri"],
-            "token_uri": gsheets_secrets["token_uri"],
-            "auth_provider_x509_cert_url": gsheets_secrets["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": gsheets_secrets["client_x509_cert_url"],
-            "universe_domain": gsheets_secrets["universe_domain"]
+            "type": gsheets_secrets.get("type", "service_account"),
+            "project_id": gsheets_secrets.get("project_id"),
+            "private_key_id": gsheets_secrets.get("private_key_id"),
+            "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
+            "client_email": gsheets_secrets.get("client_email"),
+            "client_id": gsheets_secrets.get("client_id"),
+            "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
+            "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com")
         }
 
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
-        
-        # Sostituisci "Foglio1" con il nome esatto della tua scheda se è diverso
         return spreadsheet.worksheet("Foglio1")
     except Exception as e:
-        st.error(f"Errore di autenticazione gspread: {e}")
+        st.error(f"Errore dettagliato autenticazione gspread: {repr(e)}")
         return None
 
 
