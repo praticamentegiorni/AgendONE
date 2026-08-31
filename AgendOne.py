@@ -621,19 +621,45 @@ with tab3:
         )
 
         if not df_report.empty:
-            df_report_vis = df_report.copy()
-            if "Data" in df_report_vis.columns:
-                df_report_vis["Data_Italiana"] = pd.to_datetime(
-                    df_report_vis["Data"], errors="coerce"
-                ).dt.strftime("%d/%m/%Y")
-                cols_rep = ["Data_Italiana"] + [
-                    c
-                    for c in df_report_vis.columns
-                    if c not in ["Data_Italiana", "Data", "Data_dt"]
-                ]
-                df_report_vis = df_report_vis[cols_rep]
+            st.markdown("---")
+            st.markdown("### 📋 Elenco Attività in Evidenza")
 
-            st.dataframe(df_report_vis, use_container_width=True, hide_index=True)
+            # Generazione dei riquadri personalizzati in stile card
+            for _, row in df_report.iterrows():
+                data_formattata = (
+                    pd.to_datetime(row["Data"], errors="coerce").strftime("%d/%m/%Y")
+                    if pd.notnull(row["Data"])
+                    else ""
+                )
+                classe = str(row["Classe"])
+                sede = str(row["Sede"])
+                modalita = str(row["Modalità"])
+                orario_i = str(row["Orario Inizio"])
+                orario_f = str(row["Orario Fine"])
+                note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
+
+                # HTML del riquadro nero con separatori " - "
+                card_html = f"""
+                <div style="
+                    border: 2px solid #333333; 
+                    border-radius: 8px; 
+                    padding: 12px 16px; 
+                    margin-bottom: 10px; 
+                    background-color: #1e1e1e; 
+                    color: #ffffff;
+                ">
+                    <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
+                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: #000000; padding: 3px 8px; border-radius: 4px; border: 1px solid #555;">🕒 {orario_i} - {orario_f}</span>
+                    </div>
+                    <div style="font-size: 0.95em; color: #dddddd;">
+                        {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
+                    </div>
+                    {f'<div style="font-size: 0.85em; color: #aaaaaa; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+
+            st.markdown("---")
             st.download_button(
                 label="📥 Scarica Report Filtrato (CSV)",
                 data=df_report.drop(
