@@ -98,7 +98,7 @@ def carica_dati():
         )
 
 
-# Salvataggio e aggiornamento dati su Google Sheets tramite gspread
+# Salvataggio e aggiornamento dati su Google Sheets tramite gspread (con debug)
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
@@ -119,11 +119,13 @@ def salva_dati(df_to_save):
         # Prepara la lista di liste (intestazioni + righe)
         righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         
-        # Scrive i dati usando il metodo standard di aggiornamento range
-        worksheet.update(righe)
-        
+        # Scrive i dati
+        worksheet.update("A1", righe)
+        st.success("Dati salvati correttamente su Google Sheets!")
     except Exception as e:
-        st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
+        # Mostra l'errore tecnico dettagliato a schermo per capire la causa
+        st.error(f"DETTAGLIO ERRORE GSPREAD: {str(e)}")
+        raise e
 
 df = carica_dati()
 
