@@ -108,14 +108,19 @@ def carica_dati():
             df = df.rename(columns={"Luogo": "Sede"})
             
         if "Data" in df.columns:
-            # Converte la data forzando il formato giorno-mese-anno
+            # Converte la colonna forzando il formato giorno prima (dayfirst=True) e gestendo gli errori
             df["Data_dt"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
             
-            # Normalizza la data in formato stringa standard YYYY-MM-DD per il backend
+            # Se la conversione automatica fallisce per alcune righe formattate come stringhe strane, proviamo un parsing esplicito
+            mask_nat = df["Data_dt"].isna() & df["Data"].notna()
+            if mask_nat.any():
+                df.loc[mask_nat, "Data_dt"] = pd.to_datetime(df.loc[mask_nat, "Data"], errors="coerce", format="%d/%m/%Y")
+
+            # Standardizziamo la colonna Data in formato ISO (YYYY-MM-DD) per l'ordinamento e il backend
             mask_valid = df["Data_dt"].notna()
             df.loc[mask_valid, "Data"] = df.loc[mask_valid, "Data_dt"].dt.strftime("%Y-%m-%d")
             
-            # Ricalcola sempre il mese in italiano con la maiuscola iniziale corretta
+            # Assegnamo il mese corretto basato sulla data effettiva parsata correttamente
             df.loc[mask_valid, "Mese"] = df.loc[mask_valid, "Data_dt"].apply(
                 lambda dt: traduci_mese(dt.strftime("%B")).capitalize()
             )
