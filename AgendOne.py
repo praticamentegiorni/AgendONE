@@ -98,11 +98,28 @@ def carica_dati():
         )
 
 
-# Salvataggio e aggiornamento dati su Google Sheets
+# Salvataggio e aggiornamento dati su Google Sheets tramite gspread
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
-    conn.update(data=df_to_save)
+
+    try:
+        creds = conn._secrets["credentials"]
+        spreadsheet_url = conn._secrets["spreadsheet"]
+
+        import gserver
+        import gspread
+
+        client = gspread.service_account_from_dict(creds)
+        spreadsheet = client.open_by_url(spreadsheet_url)
+        worksheet = spreadsheet.get_worksheet(0)
+
+        worksheet.clear()
+        worksheet.update(
+            [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        )
+    except Exception as e:
+        st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
 
 df = carica_dati()
