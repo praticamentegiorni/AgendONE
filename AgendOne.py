@@ -12,37 +12,64 @@ st.set_page_config(
 # File di configurazione locale delle tabelle
 CONFIG_FILE = "config_tabelle.json"
 
+# Dizionario per i mesi in italiano
+MESI_ITALIANI = {
+    "January": "Gennaio",
+    "February": "Febbraio",
+    "March": "Marzo",
+    "April": "Aprile",
+    "May": "Maggio",
+    "June": "Giugno",
+    "July": "Luglio",
+    "August": "Agosto",
+    "September": "Settembre",
+    "October": "Ottobre",
+    "November": "Novembre",
+    "December": "Dicembre",
+}
+
+
+def traduci_mese(mese_en):
+    return MESI_ITALIANI.get(mese_en, mese_en)
+
 
 # Funzione per ottenere il client gspread dai secrets di Streamlit
 def get_gspread_client_and_sheet():
     try:
         import gspread
-        import toml
 
-        # Legge direttamente la configurazione gsheets dai secrets di Streamlit
         gsheets_secrets = st.secrets["connections"]["gsheets"]
         spreadsheet_url = gsheets_secrets["spreadsheet"]
 
-        # Se i secrets sono definiti come singoli campi sparsi, li ricompattiamo in un dizionario
         creds_dict = {
             "type": gsheets_secrets.get("type", "service_account"),
             "project_id": gsheets_secrets.get("project_id"),
             "private_key_id": gsheets_secrets.get("private_key_id"),
-            "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
+            "private_key": gsheets_secrets.get("private_key", "").replace(
+                "\\n", "\n"
+            ),
             "client_email": gsheets_secrets.get("client_email"),
             "client_id": gsheets_secrets.get("client_id"),
-            "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-            "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
-            "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+            "auth_uri": gsheets_secrets.get(
+                "auth_uri", "https://accounts.google.com/o/oauth2/auth"
+            ),
+            "token_uri": gsheets_secrets.get(
+                "token_uri", "https://oauth2.googleapis.com/token"
+            ),
+            "auth_provider_x509_cert_url": gsheets_secrets.get(
+                "auth_provider_x509_cert_url",
+                "https://www.googleapis.com/oauth2/v1/certs",
+            ),
             "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
-            "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com")
+            "universe_domain": gsheets_secrets.get(
+                "universe_domain", "googleapis.com"
+            ),
         }
 
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
         return spreadsheet.worksheet("Foglio1")
     except Exception as e:
-        st.error(f"Errore dettagliato autenticazione gspread: {repr(e)}")
         return None
 
 
@@ -133,7 +160,6 @@ def salva_dati(df_to_save):
         worksheet.clear()
         righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         worksheet.update("A1", righe)
-        st.success("Dati salvati correttamente su Google Sheets!")
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
@@ -159,15 +185,29 @@ with tab1:
             data_selezionata = st.date_input(
                 "Giorno", value=datetime.date.today(), format="DD/MM/YYYY"
             )
-            mese_str = data_selezionata.strftime("%B")
+            mese_str = traduci_mese(data_selezionata.strftime("%B"))
         with col_d2:
             st.info(f"Mese di riferimento: **{mese_str}**")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            orario_inizio = st.time_input("Orario Inizio", value=datetime.time(9, 0))
-        with col2:
-            orario_fine = st.time_input("Orario Fine", value=datetime.time(18, 0))
+        st.markdown("**Selezione Orario**")
+        col_o1, col_o2, col_o3, col_o4 = st.columns(4)
+        with col_o1:
+            ora_i = st.selectbox(
+                "Ora Inizio", options=list(range(0, 24)), index=9
+            )
+        with col_o2:
+            min_i = st.selectbox(
+                "Minuti Inizio", options=[0, 15, 30, 45], index=0
+            )
+        with col_o3:
+            ora_f = st.selectbox(
+                "Ora Fine", options=list(range(0, 24)), index=18
+            )
+        with col_o4:
+            min_f = st.selectbox("Minuti Fine", options=[0, 15, 30, 45], index=0)
+
+        orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
+        orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -223,7 +263,7 @@ with tab1:
             val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
             val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
-            if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
+            if nuova_classe_libera and nueva_classe_libera not in config["classi"]:
                 config["classi"].append(nuova_classe_libera)
             if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
                 config["sedi"].append(nuova_sede_libera)
@@ -234,8 +274,8 @@ with tab1:
             nuovo_dato = pd.DataFrame({
                 "Data": [data_selezionata.strftime("%Y-%m-%d")],
                 "Mese": [mese_str],
-                "Orario Inizio": [str(orario_inizio)],
-                "Orario Fine": [str(orario_fine)],
+                "Orario Inizio": [orario_inizio_str],
+                "Orario Fine": [orario_fine_str],
                 "Classe": [val_classe],
                 "Sede": [val_sede],
                 "Modalità": [val_modalita],
@@ -244,6 +284,7 @@ with tab1:
 
             df = pd.concat([df, nuovo_dato], ignore_index=True)
             salva_dati(df)
+            st.success("Attività salvata con successo!")
             st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE =================
@@ -341,6 +382,7 @@ with tab3:
             if righe_selezionate:
                 df = df.drop(righe_selezionate).reset_index(drop=True)
                 salva_dati(df)
+                st.success("Righe eliminate con successo!")
                 st.rerun()
             else:
                 st.warning("Seleziona almeno un appuntamento da eliminare.")
@@ -360,28 +402,59 @@ with tab3:
                 except:
                     data_default = datetime.date.today()
 
+                # Parsing orari esistenti
                 try:
-                    ora_i_def = datetime.datetime.strptime(
-                        str(riga_corrente["Orario Inizio"]), "%H:%M:%S"
-                    ).time()
+                    parti_i = str(riga_corrente["Orario Inizio"]).split(":")
+                    h_def_i, m_def_i = int(parti_i[0]), int(parti_i[1])
                 except:
-                    ora_i_def = datetime.time(9, 0)
+                    h_def_i, m_def_i = 9, 0
 
                 try:
-                    ora_f_def = datetime.datetime.strptime(
-                        str(riga_corrente["Orario Fine"]), "%H:%M:%S"
-                    ).time()
+                    parti_f = str(riga_corrente["Orario Fine"]).split(":")
+                    h_def_f, m_def_f = int(parti_f[0]), int(parti_f[1])
                 except:
-                    ora_f_def = datetime.time(18, 0)
+                    h_def_f, m_def_f = 18, 0
 
                 mod_data = st.date_input(
                     "Data", value=data_default, format="DD/MM/YYYY"
                 )
-                c_m1, c_m2 = st.columns(2)
-                with c_m1:
-                    mod_ora_inizio = st.time_input("Orario Inizio", value=ora_i_def)
-                with c_m2:
-                    mod_ora_fine = st.time_input("Orario Fine", value=ora_f_def)
+
+                c_mo1, c_mo2, c_mo3, c_mo4 = st.columns(4)
+                with c_mo1:
+                    mod_ora_i = st.selectbox(
+                        "Ora Inizio",
+                        options=list(range(0, 24)),
+                        index=h_def_i
+                        if h_def_i in range(0, 24)
+                        else 9,
+                    )
+                with c_mo2:
+                    mod_min_i = st.selectbox(
+                        "Minuti Inizio",
+                        options=[0, 15, 30, 45],
+                        index=[0, 15, 30, 45].index(m_def_i)
+                        if m_def_i in [0, 15, 30, 45]
+                        else 0,
+                    )
+                with c_mo3:
+                    mod_ora_f = st.selectbox(
+                        "Ora Fine",
+                        options=list(range(0, 24)),
+                        index=h_def_f
+                        if h_def_f in range(0, 24)
+                        else 18,
+                    )
+                with c_mo4:
+                    mod_min_f = st.selectbox(
+                        "Minuti Fine",
+                        options=[0, 15, 30, 45],
+                        index=[0, 15, 30, 45].index(m_def_f)
+                        if m_def_f in [0, 15, 30, 45]
+                        else 0,
+                    )
+
+                mod_orario_i_str = f"{mod_ora_i:02d}:{mod_min_i:02d}"
+                mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
 
                 mod_classe = st.text_input(
                     "Classe", value=str(riga_corrente["Classe"])
@@ -396,20 +469,23 @@ with tab3:
                     "💾 Salva Modifiche", use_container_width=True
                 ):
                     df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
-                    df.loc[riga_idx, "Mese"] = mod_data.strftime("%B")
-                    df.loc[riga_idx, "Orario Inizio"] = str(mod_ora_inizio)
-                    df.loc[riga_idx, "Orario Fine"] = str(mod_ora_fine)
+                    df.loc[riga_idx, "Mese"] = traduci_mese(
+                        mod_data.strftime("%B")
+                    )
+                    df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
+                    df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
                     df.loc[riga_idx, "Classe"] = mod_classe
                     df.loc[riga_idx, "Sede"] = mod_sede
                     df.loc[riga_idx, "Modalità"] = mod_modalita
                     df.loc[riga_idx, "Note"] = mod_note
 
                     salva_dati(df)
+                    st.success("Modifiche salvate con successo!")
                     st.rerun()
 
         # ================= REPORT =================
         st.markdown("---")
-        st.subheader("📈 Generazione Report & Ricerca Avanzata")
+        st.subheader("📈 Generazione Report, Ricerca & Ordinamento")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -446,6 +522,27 @@ with tab3:
                 "Filtra per Modalità", options=modalita_disponibili
             )
 
+        # Opzioni di ordinamento
+        st.markdown("##### 🔃 Opzioni di Ordinamento Report")
+        col_ord1, col_ord2 = st.columns(2)
+        with col_ord1:
+            campi_ordinamento = {
+                "Data": "Data_dt",
+                "Classe": "Classe",
+                "Sede": "Sede",
+                "Tipologia / Modalità": "Modalità",
+            }
+            scelta_ordinamento = st.selectbox(
+                "Ordina per", options=list(campi_ordinamento.keys())
+            )
+        with col_ord2:
+            direzione_ordinamento = st.radio(
+                "Direzione",
+                options=["Crescente (A-Z / Dal più vecchio)", "Decrescente (Z-A / Dal più recente)"],
+                horizontal=True,
+            )
+        crescente = "Crescente" in direzione_ordinamento
+
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
             df_report["Data_dt"] = pd.to_datetime(
@@ -478,25 +575,35 @@ with tab3:
 
                 df_report = df_report[df_report.apply(match_multipli, axis=1)]
 
+        # Applicazione ordinamento
+        colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
+        if colonna_ordinamento in df_report.columns:
+            df_report = df_report.sort_values(
+                by=colonna_ordinamento, ascending=crescente
+            )
+
+        # Calcolo ore totali
         ore_totali = 0.0
         for _, row in df_report.iterrows():
             try:
                 t_inizio = datetime.datetime.strptime(
-                    str(row["Orario Inizio"]), "%H:%M:%S"
+                    str(row["Orario Inizio"]), "%H:%M"
                 )
             except:
                 try:
                     t_inizio = datetime.datetime.strptime(
-                        str(row["Orario Inizio"]), "%H:%M"
+                        str(row["Orario Inizio"]), "%H:%M:%S"
                     )
                 except:
                     t_inizio = None
 
             try:
-                t_fine = datetime.datetime.strptime(str(row["Orario Fine"]), "%H:%M:%S")
+                t_fine = datetime.datetime.strptime(str(row["Orario Fine"]), "%H:%M")
             except:
                 try:
-                    t_fine = datetime.datetime.strptime(str(row["Orario Fine"]), "%H:%M")
+                    t_fine = datetime.datetime.strptime(
+                        str(row["Orario Fine"]), "%H:%M:%S"
+                    )
                 except:
                     t_fine = None
 
