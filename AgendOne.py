@@ -624,7 +624,7 @@ with tab3:
             st.markdown("---")
             st.markdown("### 📋 Elenco Attività in Evidenza")
 
-            # Generazione dei riquadri personalizzati in stile card
+            # Generazione dei riquadri personalizzati in stile card a schermo
             for _, row in df_report.iterrows():
                 data_formattata = (
                     pd.to_datetime(row["Data"], errors="coerce").strftime("%d/%m/%Y")
@@ -638,7 +638,6 @@ with tab3:
                 orario_f = str(row["Orario Fine"])
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
-                # HTML del riquadro nero con separatori " - "
                 card_html = f"""
                 <div style="
                     border: 2px solid #333333; 
@@ -659,12 +658,47 @@ with tab3:
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
 
+            # Preparazione del DataFrame specifico per il CSV con le formattazioni richieste
+            df_csv = df_report.copy()
+            if "Data" in df_csv.columns:
+                df_csv["Data"] = pd.to_datetime(
+                    df_csv["Data"], errors="coerce"
+                ).dt.strftime("%d/%m/%Y")
+
+            # Unione di orario inizio e fine nello stesso campo
+            df_csv["Orario"] = (
+                df_csv["Orario Inizio"].astype(str)
+                + " - "
+                + df_csv["Orario Fine"].astype(str)
+            )
+
+            # Unione di classe, sede e modalità con il trattino spaziato
+            df_csv["Dettagli Attività"] = (
+                df_csv["Classe"].astype(str)
+                + " - "
+                + df_csv["Sede"].astype(str)
+                + " - "
+                + df_csv["Modalità"].astype(str)
+            )
+
+            # Pulizia e riordinamento delle colonne per il file CSV
+            colonne_csv_finali = ["Data", "Mese", "Orario", "Dettagli Attività"]
+            if "Note" in df_csv.columns:
+                colonne_csv_finali.append("Note")
+
+            df_csv_esportazione = df_csv[colonne_csv_finali].rename(
+                columns={
+                    "Data": "Data",
+                    "Mese": "Mese",
+                    "Orario": "Orario (Inizio - Fine)",
+                    "Dettagli Attività": "Classe - Sede - Modalità",
+                }
+            )
+
             st.markdown("---")
             st.download_button(
                 label="📥 Scarica Report Filtrato (CSV)",
-                data=df_report.drop(
-                    columns=["Data_dt"], errors="ignore"
-                ).to_csv(index=False).encode("utf-8"),
+                data=df_csv_esportazione.to_csv(index=False).encode("utf-8"),
                 file_name="report_orari_filtrato.csv",
                 mime="text/csv",
                 use_container_width=True,
