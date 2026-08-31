@@ -526,7 +526,7 @@ with tab3:
                 ]
                 df_report_vis = df_report_vis[cols_rep]
 
-            st.dataframe(df_report_vis, use_container_width=True, hide_init=True)
+            st.dataframe(df_report_vis, use_container_width=True, hide_index=True)
             st.download_button(
                 label="📥 Scarica Report Filtrato (CSV)",
                 data=df_report.drop(
