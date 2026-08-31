@@ -108,13 +108,18 @@ def carica_dati():
             df = df.rename(columns={"Luogo": "Sede"})
             
         if "Data" in df.columns:
-            # Conversione robusta con dayfirst=True per gestire sia DD/MM/YYYY che YYYY-MM-DD
+            # Converte la data forzando il formato giorno-mese-anno
             df["Data_dt"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
-            # Ricalcola la colonna Data in formato standard ISO per coerenza
+            
+            # Normalizza la data in formato stringa standard YYYY-MM-DD per il backend
             mask_valid = df["Data_dt"].notna()
             df.loc[mask_valid, "Data"] = df.loc[mask_valid, "Data_dt"].dt.strftime("%Y-%m-%d")
-            # Sincronizza automaticamente il mese in base alla data reale
-            df["Mese"] = df["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")) if pd.notnull(dt) else df.get("Mese", ""))
+            
+            # Ricalcola sempre il mese in italiano con la maiuscola iniziale corretta
+            df.loc[mask_valid, "Mese"] = df.loc[mask_valid, "Data_dt"].apply(
+                lambda dt: traduci_mese(dt.strftime("%B")).capitalize()
+            )
+            
         return df
     except Exception as e:
         return empty_df
