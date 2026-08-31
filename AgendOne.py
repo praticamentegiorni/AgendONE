@@ -18,15 +18,19 @@ def get_gspread_client_and_sheet():
     try:
         import gspread
 
-        # Legge i secrets configurati su Streamlit Cloud
         gsheets_secrets = st.secrets["connections"]["gsheets"]
         spreadsheet_url = gsheets_secrets["spreadsheet"]
 
-        # Crea il client tramite dizionario delle credenziali
-        client = gspread.service_account_from_dict(dict(gsheets_secrets))
+        json_str = gsheets_secrets["text"]
+        creds_dict = json.loads(json_str)
+
+        client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
-        return spreadsheet.get_worksheet(0)
+        
+        # Sostituisci "Foglio1" con il nome esatto della scheda in basso nel tuo file Google Sheets
+        return spreadsheet.worksheet("Foglio1")
     except Exception as e:
+        st.error(f"Errore di autenticazione gspread: {e}")
         return None
 
 
