@@ -101,11 +101,12 @@ def get_gspread_client_and_sheet():
     except Exception as e:
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar
+# Funzione per sincronizzare l'evento su Google Calendar (con gestione errori 404)
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
 
         gsheets_secrets = st.secrets["connections"]["gsheets"]
         creds_dict = {
@@ -156,13 +157,24 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
             return event_result.get('id')
         elif azione == "aggiorna" and evento_id_esistente:
-            service.events().update(calendarId=calendar_id, eventId=evento_id_esistente, body=body).execute()
-            return evento_id_esistente
+            try:
+                service.events().update(calendarId=calendar_id, eventId=evento_id_esistente, body=body).execute()
+                return evento_id_esistente
+            except HttpError as err:
+                if err.resp.status == 404:
+                    event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
+                    return event_result.get('id')
+                else:
+                    raise err
         elif azione == "aggiorna" and not evento_id_esistente:
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
             return event_result.get('id')
         elif azione == "elimina" and evento_id_esistente:
-            service.events().delete(calendarId=calendar_id, eventId=evento_id_esistente).execute()
+            try:
+                service.events().delete(calendarId=calendar_id, eventId=evento_id_esistente).execute()
+            except HttpError as err:
+                if err.resp.status != 404:
+                    raise err
             return None
     except Exception as e:
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
