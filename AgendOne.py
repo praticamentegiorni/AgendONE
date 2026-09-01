@@ -283,7 +283,8 @@ with tab3:
         if "Data" in df_vis.columns:
             df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
-            df_vis["Data"] = df_vis["Data_dt"].dt.date
+            # Formattazione esplicita in stringa DD/MM/YYYY per la visualizzazione corretta
+            df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt"]]
             df_vis = df_vis[cols]
@@ -481,17 +482,29 @@ with tab3:
                 orario_f = str(row["Orario Fine"])
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
+                # Assegnazione colore di sfondo in base alla modalità (blu tenue per presenza, verde tenue per videolezione)
+                mod_lower = modalita.lower()
+                if "presenza" in mod_lower:
+                    bg_color = "#162238"  # Blu tenue elegante per tema scuro
+                    border_color = "#2b4c7e"
+                elif "video" in mod_lower:
+                    bg_color = "#153322"  # Verde tenue elegante per tema scuro
+                    border_color = "#286643"
+                else:
+                    bg_color = "#1e1e1e"  # Default
+                    border_color = "#333333"
+
                 card_html = f"""
                 <div style="
-                    border: 2px solid #333333; 
+                    border: 2px solid {border_color}; 
                     border-radius: 8px; 
                     padding: 12px 16px; 
                     margin-bottom: 10px; 
-                    background-color: #1e1e1e; 
+                    background-color: {bg_color}; 
                     color: #ffffff;
                 ">
                     <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
-                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: #000000; padding: 3px 8px; border-radius: 4px; border: 1px solid #555;">🕒 {orario_i} - {orario_f}</span>
+                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f}</span>
                     </div>
                     <div style="font-size: 0.95em; color: #dddddd;">
                         {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
