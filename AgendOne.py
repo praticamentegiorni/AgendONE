@@ -101,6 +101,74 @@ def get_gspread_client_and_sheet():
     except Exception as e:
         return None
 
+# Funzione per sincronizzare l'evento su Google Calendar
+def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+
+        gsheets_secrets = st.secrets["connections"]["gsheets"]
+        creds_dict = {
+            "type": gsheets_secrets.get("type", "service_account"),
+            "project_id": gsheets_secrets.get("project_id"),
+            "private_key_id": gsheets_secrets.get("private_key_id"),
+            "private_key": gsheets_secrets.get("private_key", "").replace("\n", "\n"),
+            "client_email": gsheets_secrets.get("client_email"),
+            "client_id": gsheets_secrets.get("client_id"),
+            "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
+            "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
+        }
+
+        SCOPES = ['https://www.googleapis.com/auth/calendar']
+        credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        service = build('calendar', 'v3', credentials=credentials)
+
+        # ID del calendario (se usi il calendario principale della tua email, usa 'primary')
+        calendar_id = gsheets_secrets.get("calendar_id", "primary")
+
+        # Preparazione orari ISO format
+        data_str = dati_evento["Data"] # YYYY-MM-DD
+        start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
+        end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
+
+        body = {
+            'summary': f"Lezione/Impegno: {dati_evento['Classe']} ({dati_evento['Modalità']})",
+            'location': str(dati_evento['Sede']),
+            'description': f"Note: {dati_evento['Note']}\nGestito da AgendOne",
+            'start': {
+                'dateTime': start_datetime,
+                'timeZone': 'Europe/Rome',
+            },
+            'end': {
+                'dateTime': end_datetime,
+                'timeZone': 'Europe/Rome',
+            },
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 30}, # Notifica push 30 minuti prima
+                    {'method': 'popup', 'minutes': 10}, # Notifica push 10 minuti prima
+                ],
+            },
+        }
+
+        if azione == "crea":
+            event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
+            return event_result.get('id')
+        elif azione == "aggiorna" and evento_id_esistente:
+            service.events().update(calendarId=calendar_id, calendarEventId=evento_id_esistente, body=body).execute()
+            return evento_id_esistente
+        elif azione == "elimina" and evento_id_esistente:
+            service.events().delete(calendarId=calendar_id, calendarEventId=evento_id_esistente).execute()
+            return None
+    except Exception as e:
+        # Se non è configurato il Calendar ID o ci sono problemi di permessi, l'app non si blocca ma avvisa a log/video
+        print(f"Errore Calendar: {e}")
+        return None
+
 # Gestione configurazione tabelle
 def carica_config():
     default_config = {
@@ -133,7 +201,7 @@ config = carica_config()
 # Caricamento dati da Google Sheets
 def carica_dati():
     empty_df = pd.DataFrame(columns=[
-        "Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note"
+        "Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"
     ])
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -162,6 +230,9 @@ def carica_dati():
             df["Svolto"] = False
         else:
             df["Svolto"] = df["Svolto"].apply(lambda x: True if str(x).lower() in ["true", "1", "yes", "vero", "on"] else False)
+
+        if "Calendar_ID" not in df.columns:
+            df["Calendar_ID"] = ""
             
         if "Ore" not in df.columns or df["Ore"].isna().all():
             df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
@@ -253,6 +324,19 @@ with tab1:
                 config["modalita"].append(nuovo_mod_libero)
             salva_config(config)
 
+            dati_evento = {
+                "Data": data_selezionata.strftime("%Y-%m-%d"),
+                "Orario Inizio": orario_inizio_str,
+                "Orario Fine": orario_fine_str,
+                "Classe": val_classe,
+                "Sede": val_sede,
+                "Modalità": val_modalita,
+                "Note": note
+            }
+            
+            # Sincronizzazione con Google Calendar
+            cal_id = sincronizza_google_calendar("crea", dati_evento)
+
             nuovo_dato = pd.DataFrame({
                 "Data": [data_selezionata.strftime("%Y-%m-%d")],
                 "Mese": [mese_str],
@@ -263,12 +347,13 @@ with tab1:
                 "Sede": [val_sede],
                 "Modalità": [val_modalita],
                 "Svolto": [svolto_iniziale],
-                "Note": [note]
+                "Note": [note],
+                "Calendar_ID": [cal_id if cal_id else ""]
             })
 
             df = pd.concat([df, nuovo_dato], ignore_index=True)
             salva_dati(df)
-            st.success("Attività salvata con successo!")
+            st.success("Attività salvata e sincronizzata con Google Calendar!")
             st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE =================
@@ -320,13 +405,10 @@ with tab3:
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
-            # Aggiorna/ricalcola le ore se mancanti
             df_vis["Ore"] = df_vis.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
-            
-            # Ordinamento per data e orario inizio
             df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
             
-            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale"]]
+            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID"]]
             df_vis = df_vis[cols + ["ID_originale"]]
 
         filtro = st.text_input("🔍 Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
@@ -363,7 +445,6 @@ with tab3:
             }
         )
 
-        # Sincronizza lo stato "Svolto" se modificato direttamente nella tabella
         modificato = False
         for _, riga_ed in df_editato.iterrows():
             idx_orig = int(riga_ed["ID"])
@@ -381,9 +462,13 @@ with tab3:
         with col_act1:
             if st.button("🗑️ Elimina Selezionati", type="primary", use_container_width=True):
                 if righe_selezionate:
+                    for r_idx in righe_selezionate:
+                        cal_id_esistente = df.loc[r_idx, "Calendar_ID"] if "Calendar_ID" in df.columns else ""
+                        if cal_id_esistente:
+                            sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(righe_selezionate).reset_index(drop=True)
                     salva_dati(df)
-                    st.success("Righe eliminate con successo!")
+                    st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
                 else:
                     st.warning("Seleziona almeno un appuntamento da eliminare.")
@@ -397,9 +482,21 @@ with tab3:
                     else:
                         nuova_riga["Note"] = "Copia"
                     
+                    dati_evento = {
+                        "Data": str(nuova_riga["Data"]),
+                        "Orario Inizio": str(nuova_riga["Orario Inizio"]),
+                        "Orario Fine": str(nuova_riga["Orario Fine"]),
+                        "Classe": str(nuova_riga["Classe"]),
+                        "Sede": str(nuova_riga["Sede"]),
+                        "Modalità": str(nuova_riga["Modalità"]),
+                        "Note": str(nuova_riga["Note"])
+                    }
+                    cal_id = sincronizza_google_calendar("crea", dati_evento)
+                    nuova_riga["Calendar_ID"] = cal_id if cal_id else ""
+                    
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     salva_dati(df)
-                    st.success("Appuntamento duplicato con successo!")
+                    st.success("Appuntamento duplicato e aggiunto a Calendar!")
                     st.rerun()
                 elif len(righe_selezionate) > 1:
                     st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
@@ -468,8 +565,25 @@ with tab3:
                     df.loc[riga_idx, "Svolto"] = mod_svolto
                     df.loc[riga_idx, "Note"] = mod_note
 
+                    dati_evento = {
+                        "Data": mod_data.strftime("%Y-%m-%d"),
+                        "Orario Inizio": mod_orario_i_str,
+                        "Orario Fine": mod_orario_f_str,
+                        "Classe": mod_classe,
+                        "Sede": mod_sede,
+                        "Modalità": mod_modalita,
+                        "Note": mod_note
+                    }
+
+                    cal_id_esistente = df.loc[riga_idx, "Calendar_ID"] if "Calendar_ID" in df.columns else ""
+                    if cal_id_esistente:
+                        sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
+                    else:
+                        cal_id = sincronizza_google_calendar("crea", dati_evento)
+                        df.loc[riga_idx, "Calendar_ID"] = cal_id if cal_id else ""
+
                     salva_dati(df)
-                    st.success("Modifiche salvate con successo!")
+                    st.success("Modifiche salvate e calendario aggiornato!")
                     st.rerun()
 
         # ================= REPORT =================
@@ -576,7 +690,7 @@ with tab3:
                     else:
                         bg_color = "#1e1e1e"
                         border_color = "#333333"
-                    text_style = "color: #ffffff;"
+                    text_style = "color: **ffffff;**"
 
                 card_html = f"""
                 <div style="
