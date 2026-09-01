@@ -126,10 +126,8 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         service = build('calendar', 'v3', credentials=credentials)
 
-        # ID del calendario (se usi il calendario principale della tua email, usa 'primary')
         calendar_id = gsheets_secrets.get("calendar_id", "primary")
 
-        # Preparazione orari ISO format
         data_str = dati_evento["Data"] # YYYY-MM-DD
         start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
         end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
@@ -149,8 +147,8 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             'reminders': {
                 'useDefault': False,
                 'overrides': [
-                    {'method': 'popup', 'minutes': 30}, # Notifica push 30 minuti prima
-                    {'method': 'popup', 'minutes': 10}, # Notifica push 10 minuti prima
+                    {'method': 'popup', 'minutes': 30},
+                    {'method': 'popup', 'minutes': 10},
                 ],
             },
         }
@@ -165,7 +163,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             service.events().delete(calendarId=calendar_id, calendarEventId=evento_id_esistente).execute()
             return None
     except Exception as e:
-        # Se non è configurato il Calendar ID o ci sono problemi di permessi, l'app non si blocca ma avvisa a log/video
         print(f"Errore Calendar: {e}")
         return None
 
@@ -334,7 +331,6 @@ with tab1:
                 "Note": note
             }
             
-            # Sincronizzazione con Google Calendar
             cal_id = sincronizza_google_calendar("crea", dati_evento)
 
             nuovo_dato = pd.DataFrame({
@@ -690,7 +686,7 @@ with tab3:
                     else:
                         bg_color = "#1e1e1e"
                         border_color = "#333333"
-                    text_style = "color: **ffffff;**"
+                    text_style = "color: #ffffff;"
 
                 card_html = f"""
                 <div style="
@@ -721,7 +717,6 @@ with tab3:
             esistenti = [c for c in colonne_originali if c in df_excel.columns]
             df_excel_esportazione = df_excel[esistenti].copy()
 
-            # Creazione file Excel con larghezza colonne adattata automaticamente
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 df_excel_esportazione.to_excel(writer, index=False, sheet_name="Report Orari")
