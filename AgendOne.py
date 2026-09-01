@@ -297,8 +297,19 @@ with tab3:
         df_mostra.insert(0, "Seleziona", False)
         df_mostra.insert(1, "ID", df_mostra.index)
 
+        # Funzione di stile per colorare le righe della tabella principale con colori più brillanti
+        def colora_righe_tabella(row):
+            mod = str(row.get("Modalità", "")).lower()
+            if "presenza" in mod:
+                return ['background-color: #1c3d73; color: #ffffff'] * len(row)  # Blu più brillante
+            elif "video" in mod:
+                return ['background-color: #155c32; color: #ffffff'] * len(row)  # Verde più brillante
+            return [''] * len(row)
+
+        df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
+
         df_editato = st.data_editor(
-            df_mostra,
+            df_styled,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -482,14 +493,14 @@ with tab3:
                 orario_f = str(row["Orario Fine"])
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
-                # Assegnazione colore di sfondo in base alla modalità (blu tenue per presenza, verde tenue per videolezione)
+                # Assegnazione colori più brillanti per la presenza (blu vivace) e la videolezione (verde vivace)
                 mod_lower = modalita.lower()
                 if "presenza" in mod_lower:
-                    bg_color = "#162238"  # Blu tenue elegante per tema scuro
-                    border_color = "#2b4c7e"
+                    bg_color = "#1c3d73"  # Blu brillante
+                    border_color = "#3b73c4"
                 elif "video" in mod_lower:
-                    bg_color = "#153322"  # Verde tenue elegante per tema scuro
-                    border_color = "#286643"
+                    bg_color = "#155c32"  # Verde brillante
+                    border_color = "#28a456"
                 else:
                     bg_color = "#1e1e1e"  # Default
                     border_color = "#333333"
@@ -506,10 +517,10 @@ with tab3:
                     <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
                         {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f}</span>
                     </div>
-                    <div style="font-size: 0.95em; color: #dddddd;">
+                    <div style="font-size: 0.95em; color: #ffffff;">
                         {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
                     </div>
-                    {f'<div style="font-size: 0.85em; color: #aaaaaa; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
+                    {f'<div style="font-size: 0.85em; color: #dddddd; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
