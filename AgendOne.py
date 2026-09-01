@@ -53,6 +53,26 @@ def parse_data_italiana(val):
         
     return pd.to_datetime(val_str, errors="coerce", dayfirst=True)
 
+# Calcolo automatico delle ore tra inizio e fine
+def calcola_ore(ora_inizio, ora_fine):
+    try:
+        t_i = datetime.datetime.strptime(str(ora_inizio).strip(), "%H:%M")
+    except:
+        try:
+            t_i = datetime.datetime.strptime(str(ora_inizio).strip(), "%H:%M:%S")
+        except:
+            return 0.0
+    try:
+        t_f = datetime.datetime.strptime(str(ora_fine).strip(), "%H:%M")
+    except:
+        try:
+            t_f = datetime.datetime.strptime(str(ora_fine).strip(), "%H:%M:%S")
+        except:
+            return 0.0
+    diff = (datetime.datetime.combine(datetime.date.min, t_f.time()) - 
+            datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
+    return max(0.0, round(diff, 2))
+
 # Funzione per ottenere il client gspread dai secrets di Streamlit
 def get_gspread_client_and_sheet():
     try:
@@ -112,7 +132,7 @@ config = carica_config()
 # Caricamento dati da Google Sheets
 def carica_dati():
     empty_df = pd.DataFrame(columns=[
-        "Data", "Mese", "Orario Inizio", "Orario Fine", "Classe", "Sede", "Modalità", "Note"
+        "Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note"
     ])
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -136,6 +156,15 @@ def carica_dati():
             df.loc[mask_valid, "Mese"] = df.loc[mask_valid, "Data_dt"].apply(
                 lambda dt: traduci_mese(dt.strftime("%B")).capitalize()
             )
+            
+        if "Svolto" not in df.columns:
+            df["Svolto"] = False
+        else:
+            df["Svolto"] = df["Svolto"].apply(lambda x: True if str(x).lower() in ["true", "1", "yes", "vero", "on"] else False)
+            
+        if "Ore" not in df.columns or df["Ore"].isna().all():
+            df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
+            
         return df
     except Exception as e:
         return empty_df
@@ -190,6 +219,9 @@ with tab1:
 
         orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
         orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
+        ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
+
+        st.caption(f"⏱️ Durata stimata: **{ore_calcolate} ore**")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -202,6 +234,7 @@ with tab1:
             modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
+        svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
 
         submit_button = st.form_submit_button(label="💾 Salva Attività", use_container_width=True)
@@ -224,9 +257,11 @@ with tab1:
                 "Mese": [mese_str],
                 "Orario Inizio": [orario_inizio_str],
                 "Orario Fine": [orario_fine_str],
+                "Ore": [ore_calcolate],
                 "Classe": [val_classe],
                 "Sede": [val_sede],
                 "Modalità": [val_modalita],
+                "Svolto": [svolto_iniziale],
                 "Note": [note]
             })
 
@@ -277,7 +312,6 @@ with tab3:
 
     if not df.empty:
         df_vis = df.copy()
-        # Salviamo l'indice originale prima di ordinare, per mappare correttamente le modifiche e cancellazioni
         df_vis["ID_originale"] = df_vis.index
         
         if "Data" in df_vis.columns:
@@ -285,7 +319,10 @@ with tab3:
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
-            # Ordinamento di base per data e poi per orario d'inizio (crescenti)
+            # Aggiorna/ricalcola le ore se mancanti
+            df_vis["Ore"] = df_vis.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
+            
+            # Ordinamento per data e orario inizio
             df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
             
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale"]]
@@ -297,11 +334,13 @@ with tab3:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
         df_mostra.insert(0, "Seleziona", False)
-        # Assegniamo la colonna ID utilizzando l'ID originale preservato
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
 
         def colora_righe_tabella(row):
+            svolto = row.get("Svolto", False)
+            if svolto:
+                return ['background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'] * len(row)
             mod = str(row.get("Modalità", "")).lower()
             if "presenza" in mod:
                 return ['background-color: #1c3d73; color: #ffffff'] * len(row)
@@ -318,8 +357,22 @@ with tab3:
             column_config={
                 "Seleziona": st.column_config.CheckboxColumn(required=True),
                 "ID": st.column_config.NumberColumn(disabled=True),
+                "Svolto": st.column_config.CheckboxColumn(required=True),
+                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
             }
         )
+
+        # Sincronizza lo stato "Svolto" se modificato direttamente nella tabella
+        modificato = False
+        for _, riga_ed in df_editato.iterrows():
+            idx_orig = int(riga_ed["ID"])
+            val_nuovo_svolto = bool(riga_ed["Svolto"])
+            if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto:
+                df.loc[idx_orig, "Svolto"] = val_nuovo_svolto
+                modificato = True
+        if modificato:
+            salva_dati(df)
+            st.rerun()
 
         righe_selezionate = df_editato[df_editato["Seleziona"] == True]["ID"].tolist()
 
@@ -391,10 +444,15 @@ with tab3:
 
                 mod_orario_i_str = f"{mod_ora_i:02d}:{mod_min_i:02d}"
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
+                mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
                 mod_classe = st.text_input("Classe", value=str(riga_corrente["Classe"]))
                 mod_sede = st.text_input("Sede", value=str(riga_corrente["Sede"]))
                 mod_modalita = st.text_input("Modalità", value=str(riga_corrente["Modalità"]))
+                
+                svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
+                mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
+                
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
 
                 if st.form_submit_button("💾 Salva Modifiche", use_container_width=True):
@@ -402,9 +460,11 @@ with tab3:
                     df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
                     df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
                     df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
+                    df.loc[riga_idx, "Ore"] = mod_ore_calc
                     df.loc[riga_idx, "Classe"] = mod_classe
                     df.loc[riga_idx, "Sede"] = mod_sede
                     df.loc[riga_idx, "Modalità"] = mod_modalita
+                    df.loc[riga_idx, "Svolto"] = mod_svolto
                     df.loc[riga_idx, "Note"] = mod_note
 
                     salva_dati(df)
@@ -451,6 +511,7 @@ with tab3:
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
             df_report["Data_dt"] = df_report["Data"].apply(parse_data_italiana)
+        df_report["Ore"] = df_report.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
 
         if data_inizio_filtro:
             df_report = df_report[df_report["Data_dt"] >= pd.to_datetime(data_inizio_filtro)]
@@ -475,35 +536,11 @@ with tab3:
         colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
         if colonna_ordinamento in df_report.columns:
             if colonna_ordinamento == "Data_dt":
-                # Ordinamento primario per data e secondario per orario
                 df_report = df_report.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[crescente, True])
             else:
-                # Ordinamento primario per campo scelto e secondario per data
                 df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
 
-        ore_totali = 0.0
-        for _, row in df_report.iterrows():
-            try:
-                t_inizio = datetime.datetime.strptime(str(row["Orario Inizio"]), "%H:%M")
-            except:
-                try:
-                    t_inizio = datetime.datetime.strptime(str(row["Orario Inizio"]), "%H:%M:%S")
-                except:
-                    t_inizio = None
-
-            try:
-                t_fine = datetime.datetime.strptime(str(row["Orario Fine"]), "%H:%M")
-            except:
-                try:
-                    t_fine = datetime.datetime.strptime(str(row["Orario Fine"]), "%H:%M:%S")
-                except:
-                    t_fine = None
-
-            if t_inizio and t_fine:
-                diff = (datetime.datetime.combine(datetime.date.min, t_fine.time()) - 
-                        datetime.datetime.combine(datetime.date.min, t_inizio.time())).total_seconds() / 3600.0
-                if diff > 0:
-                    ore_totali += diff
+        ore_totali = df_report["Ore"].sum()
 
         st.markdown(f"Risultati filtrati: **{len(df_report)}** attività | Ore totali: **{ore_totali:.2f} ore**")
 
@@ -519,18 +556,26 @@ with tab3:
                 modalita = str(row["Modalità"])
                 orario_i = str(row["Orario Inizio"])
                 orario_f = str(row["Orario Fine"])
+                ore_val = row["Ore"]
+                svolto_card = bool(row["Svolto"]) if "Svolto" in row else False
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
-                mod_lower = modalita.lower()
-                if "presenza" in mod_lower:
-                    bg_color = "#1c3d73"
-                    border_color = "#3b73c4"
-                elif "video" in mod_lower:
-                    bg_color = "#155c32"
-                    border_color = "#28a456"
+                if svolto_card:
+                    bg_color = "#2b2b2b"
+                    border_color = "#444444"
+                    text_style = "color: #7f7f7f; text-decoration: line-through;"
                 else:
-                    bg_color = "#1e1e1e"
-                    border_color = "#333333"
+                    mod_lower = modalita.lower()
+                    if "presenza" in mod_lower:
+                        bg_color = "#1c3d73"
+                        border_color = "#3b73c4"
+                    elif "video" in mod_lower:
+                        bg_color = "#155c32"
+                        border_color = "#28a456"
+                    else:
+                        bg_color = "#1e1e1e"
+                        border_color = "#333333"
+                    text_style = "color: #ffffff;"
 
                 card_html = f"""
                 <div style="
@@ -539,15 +584,16 @@ with tab3:
                     padding: 12px 16px; 
                     margin-bottom: 10px; 
                     background-color: {bg_color}; 
-                    color: #ffffff;
+                    {text_style}
                 ">
                     <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
-                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f}</span>
+                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f} ({ore_val:.2f}h)</span>
+                        {("&nbsp;&nbsp;✅ <i>Svolto</i>" if svolto_card else "")}
                     </div>
-                    <div style="font-size: 0.95em; color: #ffffff;">
+                    <div style="font-size: 0.95em;">
                         {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
                     </div>
-                    {f'<div style="font-size: 0.85em; color: #dddddd; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
+                    {f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
@@ -556,7 +602,7 @@ with tab3:
             if "Data" in df_csv.columns:
                 df_csv["Data"] = df_csv["Data_dt"].dt.strftime("%d/%m/%Y")
 
-            colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Classe", "Sede", "Modalità", "Note"]
+            colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note"]
             esistenti = [c for c in colonne_originali if c in df_csv.columns]
             df_csv_esportazione = df_csv[esistenti].copy()
 
