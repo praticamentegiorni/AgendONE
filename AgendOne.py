@@ -128,7 +128,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
 
         calendar_id = gsheets_secrets.get("calendar_id", "primary")
 
-        # Pulisci eventuale ID esistente da spazi o valori NaN
         if evento_id_esistente:
             evento_id_esistente = str(evento_id_esistente).strip()
             if evento_id_esistente.lower() in ["nan", "none", ""]:
@@ -255,7 +254,6 @@ def salva_dati(df_to_save):
         if c not in df_to_save.columns:
             df_to_save[c] = ""
     df_to_save = df_to_save[cols_standard]
-    # Sostituisci eventuali NaN/None con stringhe vuote per gspread
     df_to_save = df_to_save.fillna("")
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -714,3 +712,57 @@ with tab3:
                     """,
                     unsafe_allow_html=True
                 )
+
+        # Pulsanti di Esportazione e Sincronizzazione Massiva
+        st.markdown("---")
+        c_exp1, c_exp2, c_exp3 = st.columns(3)
+
+        with c_exp1:
+            df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Scarica Report CSV",
+                data=csv_data,
+                file_name="report_attivita.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        with c_exp2:
+            buffer_excel = io.BytesIO()
+            with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
+                df_export.to_excel(writer, index=False, sheet_name='Report')
+            buffer_excel.seek(0)
+            st.download_button(
+                label="📥 Scarica Report Excel",
+                data=buffer_excel,
+                file_name="report_attivita.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        with c_exp3:
+            if st.button("🔄 Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
+                count_sinc = 0
+                for idx, row in df.iterrows():
+                    cal_id = str(row.get("Calendar_ID", ""))
+                    if not cal_id or cal_id.lower() in ["nan", "none", ""]:
+                        dati_evento = {
+                            "Data": str(row["Data"]),
+                            "Orario Inizio": str(row["Orario Inizio"]),
+                            "Orario Fine": str(row["Orario Fine"]),
+                            "Classe": str(row["Classe"]),
+                            "Sede": str(row["Sede"]),
+                            "Modalità": str(row["Modalità"]),
+                            "Note": str(row["Note"])
+                        }
+                        nuovo_id = sincronizza_google_calendar("crea", dati_evento)
+                        if nuovo_id:
+                            df.loc[idx, "Calendar_ID"] = str(nuovo_id)
+                            count_sinc += 1
+                if count_sinc > 0:
+                    salva_dati(df)
+                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
+                    st.rerun()
+                else:
+                    st.info("Tutti gli eventi risultano già sincronizzati.")
