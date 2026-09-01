@@ -156,9 +156,9 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             service.events().delete(calendarId=calendar_id, calendarEventId=evento_id_esistente).execute()
             return None
     except Exception as e:
-        # Mostra l'errore direttamente a schermo nell'app Streamlit per diagnosticarlo
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
+
 # Gestione configurazione tabelle
 def carica_config():
     default_config = {
@@ -689,87 +689,18 @@ with tab3:
                         border_color = "#333333"
                     text_style = "color: #ffffff;"
 
-                note_block = f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' and note.strip() != '' else ''
-                svolto_badge = "&nbsp;&nbsp;✅ <i>Svolto</i>" if svolto_card else ""
+                note_block = f'<div style="font-size: 0.85em; margin-top: 6px; opacity: 0.8;"><b>Note:</b> {note}</div>' if note and note.strip() != "" else ""
 
-                card_html = f"""<div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background-color: {bg_color}; {text_style}">
-<div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
-{data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f} ({ore_val:.2f}h)</span>{svolto_badge}
-</div>
-<div style="font-size: 0.95em;">
-{classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
-</div>
-{note_block}
-</div>"""
+                card_html = f"""
+                <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; {text_style}">
+                    <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 4px;">
+                        <span>📅 {data_formattata} ({orario_i} - {orario_f})</span>
+                        <span>⏱️ {ore_val:.2f} h</span>
+                    </div>
+                    <div style="font-size: 1.1em; margin-bottom: 4px;">
+                        🏫 <b>{classe}</b> | 📍 {sede} | 💻 {modalita}
+                    </div>
+                    {note_block}
+                </div>
+                """
                 st.markdown(card_html, unsafe_allow_html=True)
-
-            # Pulsante per sincronizzare i vecchi eventi privi di Calendar_ID
-            st.markdown("---")
-            if st.button("🔄 Sincronizza eventi mancanti su Google Calendar"):
-    conTExt_bar = st.progress(0)
-    eventi_da_sincronizzare = df[df['Google_Calendar_ID'].isna() | (df['Google_Calendar_ID'] == "")]
-    
-    totale = len(eventi_da_sincronizzare)
-    if totale == 0:
-        st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
-    else:
-        successi = 0
-        for index, row in eventi_da_sincronizzare.iterrows():
-            dati_evento = {
-                "Data": str(row["Data"]),
-                "Orario Inizio": str(row["Orario Inizio"]),
-                "Orario Fine": str(row["Orario Fine"]),
-                "Classe": str(row["Classe"]),
-                "Modalità": str(row["Modalità"]),
-                "Sede": str(row["Sede"]),
-                "Note": str(row["Note"]) if "Note" in row and pd.notna(row["Note"]) else ""
-            }
-            
-            # Esegue la chiamata per creare l'evento sul calendario
-            new_id = sincronizza_google_calendar("crea", dati_evento)
-            if new_id:
-                df.at[index, 'Google_Calendar_ID'] = new_id
-                successi += 1
-            
-            # Aggiorna la barra di progresso
-            if totale > 0:
-                conTExt_bar.progress((index + 1) / totale)
-        
-        # Salva il dataframe aggiornato nel foglio/file
-        # (assicurati che la funzione di salvataggio del tuo file rifletta il tuo metodo corrente, es. conn.update o salvataggio excel)
-        # conn.update(spreadsheet=..., data=df) 
-        st.success(f"Sincronizzazione completata! {successi} eventi su {totale} sono stati aggiunti al calendario AgendOne.")
-        st.rerun()
-                else:
-                    st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
-
-            df_excel = df_report.copy()
-            if "Data" in df_excel.columns:
-                df_excel["Data"] = df_excel["Data_dt"].dt.strftime("%d/%m/%Y")
-
-            colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
-            esistenti = [c for c in colonne_originali if c in df_excel.columns]
-            df_excel_esportazione = df_excel[esistenti].copy()
-
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df_excel_esportazione.to_excel(writer, index=False, sheet_name="Report Orari")
-                worksheet = writer.sheets["Report Orari"]
-                for col in worksheet.columns:
-                    max_len = max(len(str(cell.value or "")) for cell in col)
-                    col_letter = col[0].column_letter
-                    worksheet.column_dimensions[col_letter].width = max(max_len + 3, 10)
-            excel_data = output.getvalue()
-
-            st.markdown("---")
-            st.download_button(
-                label="📥 Scarica Report Filtrato (Excel con larghezza colonne automatica)",
-                data=excel_data,
-                file_name="report_orari_filtrato.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        else:
-            st.info("Nessuna attività corrisponde ai criteri di ricerca.")
-    else:
-        st.info("Nessuna attività registrata nell'archivio.")
