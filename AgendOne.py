@@ -197,9 +197,8 @@ config = carica_config()
 
 # Caricamento dati da Google Sheets
 def carica_dati():
-    empty_df = pd.DataFrame(columns=[
-        "Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"
-    ])
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
+    empty_df = pd.DataFrame(columns=cols_standard)
     try:
         worksheet = get_gspread_client_and_sheet()
         if worksheet is None:
@@ -234,6 +233,10 @@ def carica_dati():
         if "Ore" not in df.columns or df["Ore"].isna().all():
             df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
             
+        for c in cols_standard:
+            if c not in df.columns:
+                df[c] = ""
+                
         return df
     except Exception as e:
         return empty_df
@@ -242,6 +245,11 @@ def carica_dati():
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
+    for c in cols_standard:
+        if c not in df_to_save.columns:
+            df_to_save[c] = ""
+    df_to_save = df_to_save[cols_standard]
     try:
         worksheet = get_gspread_client_and_sheet()
         if worksheet is None:
@@ -688,15 +696,10 @@ with tab3:
                         border_color = "#333333"
                     text_style = "color: #ffffff;"
 
+                note_html = f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' and note.strip() != '' else ''
+
                 card_html = f"""
-                <div style="
-                    border: 2px solid {border_color}; 
-                    border-radius: 8px; 
-                    padding: 12px 16px; 
-                    margin-bottom: 10px; 
-                    background-color: {bg_color}; 
-                    {text_style}
-                ">
+                <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background-color: {bg_color}; {text_style}">
                     <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
                         {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f} ({ore_val:.2f}h)</span>
                         {("&nbsp;&nbsp;✅ <i>Svolto</i>" if svolto_card else "")}
@@ -704,7 +707,7 @@ with tab3:
                     <div style="font-size: 0.95em;">
                         {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
                     </div>
-                    {f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' else ''}
+                    {note_html}
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
@@ -713,7 +716,7 @@ with tab3:
             if "Data" in df_excel.columns:
                 df_excel["Data"] = df_excel["Data_dt"].dt.strftime("%d/%m/%Y")
 
-            colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note"]
+            colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
             esistenti = [c for c in colonne_originali if c in df_excel.columns]
             df_excel_esportazione = df_excel[esistenti].copy()
 
