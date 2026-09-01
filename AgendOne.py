@@ -696,21 +696,46 @@ with tab3:
                         border_color = "#333333"
                     text_style = "color: #ffffff;"
 
-                note_html = f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' and note.strip() != '' else ''
+                note_block = f'<div style="font-size: 0.85em; margin-top: 6px; font-style: italic;">Note: {note}</div>' if note and note != 'nan' and note.strip() != '' else ''
+                svolto_badge = "&nbsp;&nbsp;✅ <i>Svolto</i>" if svolto_card else ""
 
-                card_html = f"""
-                <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background-color: {bg_color}; {text_style}">
-                    <div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
-                        {data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f} ({ore_val:.2f}h)</span>
-                        {("&nbsp;&nbsp;✅ <i>Svolto</i>" if svolto_card else "")}
-                    </div>
-                    <div style="font-size: 0.95em;">
-                        {classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
-                    </div>
-                    {note_html}
-                </div>
-                """
+                card_html = f"""<div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background-color: {bg_color}; {text_style}">
+<div style="font-size: 1.1em; font-weight: bold; margin-bottom: 6px;">
+{data_formattata} &nbsp;|&nbsp; <span style="background-color: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">🕒 {orario_i} - {orario_f} ({ore_val:.2f}h)</span>{svolto_badge}
+</div>
+<div style="font-size: 0.95em;">
+{classe} &nbsp;-&nbsp; {sede} &nbsp;-&nbsp; {modalita}
+</div>
+{note_block}
+</div>"""
                 st.markdown(card_html, unsafe_allow_html=True)
+
+            # Pulsante per sincronizzare i vecchi eventi privi di Calendar_ID
+            st.markdown("---")
+            if st.button("🔄 Sincronizza eventi mancanti su Google Calendar", use_container_width=True):
+                conteggio_sinc = 0
+                for idx, row in df.iterrows():
+                    cal_id_esistente = row.get("Calendar_ID", "")
+                    if not cal_id_esistente or str(cal_id_esistente).strip() == "":
+                        dati_evento = {
+                            "Data": str(row["Data"]),
+                            "Orario Inizio": str(row["Orario Inizio"]),
+                            "Orario Fine": str(row["Orario Fine"]),
+                            "Classe": str(row["Classe"]),
+                            "Sede": str(row["Sede"]),
+                            "Modalità": str(row["Modalità"]),
+                            "Note": str(row["Note"]) if pd.notnull(row["Note"]) else ""
+                        }
+                        nuovo_id = sincronizza_google_calendar("crea", dati_evento)
+                        if nuovo_id:
+                            df.loc[idx, "Calendar_ID"] = nuovo_id
+                            conteggio_sinc += 1
+                if conteggio_sinc > 0:
+                    salva_dati(df)
+                    st.success(f"Sincronizzati con successo {conteggio_sinc} eventi su Google Calendar!")
+                    st.rerun()
+                else:
+                    st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
 
             df_excel = df_report.copy()
             if "Data" in df_excel.columns:
