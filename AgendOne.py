@@ -1,4 +1,5 @@
 import datetime
+import io
 import json
 import os
 import pandas as pd
@@ -598,20 +599,31 @@ with tab3:
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
 
-            df_csv = df_report.copy()
-            if "Data" in df_csv.columns:
-                df_csv["Data"] = df_csv["Data_dt"].dt.strftime("%d/%m/%Y")
+            df_excel = df_report.copy()
+            if "Data" in df_excel.columns:
+                df_excel["Data"] = df_excel["Data_dt"].dt.strftime("%d/%m/%Y")
 
             colonne_originali = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note"]
-            esistenti = [c for c in colonne_originali if c in df_csv.columns]
-            df_csv_esportazione = df_csv[esistenti].copy()
+            esistenti = [c for c in colonne_originali if c in df_excel.columns]
+            df_excel_esportazione = df_excel[esistenti].copy()
+
+            # Creazione file Excel con larghezza colonne adattata automaticamente
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_excel_esportazione.to_excel(writer, index=False, sheet_name="Report Orari")
+                worksheet = writer.sheets["Report Orari"]
+                for col in worksheet.columns:
+                    max_len = max(len(str(cell.value or "")) for cell in col)
+                    col_letter = col[0].column_letter
+                    worksheet.column_dimensions[col_letter].width = max(max_len + 3, 10)
+            excel_data = output.getvalue()
 
             st.markdown("---")
             st.download_button(
-                label="📥 Scarica Report Filtrato (CSV)",
-                data=df_csv_esportazione.to_csv(index=False, sep=";").encode("utf-8"),
-                file_name="report_orari_filtrato.csv",
-                mime="text/csv",
+                label="📥 Scarica Report Filtrato (Excel con larghezza colonne automatica)",
+                data=excel_data,
+                file_name="report_orari_filtrato.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
         else:
