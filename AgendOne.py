@@ -277,13 +277,19 @@ with tab3:
 
     if not df.empty:
         df_vis = df.copy()
+        # Salviamo l'indice originale prima di ordinare, per mappare correttamente le modifiche e cancellazioni
+        df_vis["ID_originale"] = df_vis.index
+        
         if "Data" in df_vis.columns:
             df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
-            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt"]]
-            df_vis = df_vis[cols]
+            # Ordinamento di base per data (crescente)
+            df_vis = df_vis.sort_values(by="Data_dt", ascending=True)
+            
+            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale"]]
+            df_vis = df_vis[cols + ["ID_originale"]]
 
         filtro = st.text_input("🔍 Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
         df_mostra = df_vis.copy()
@@ -291,7 +297,9 @@ with tab3:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
         df_mostra.insert(0, "Seleziona", False)
-        df_mostra.insert(1, "ID", df_mostra.index)
+        # Assegniamo la colonna ID utilizzando l'ID originale preservato
+        df_mostra.insert(1, "ID", df_mostra["ID_originale"])
+        df_mostra = df_mostra.drop(columns=["ID_originale"])
 
         def colora_righe_tabella(row):
             mod = str(row.get("Modalità", "")).lower()
@@ -350,7 +358,7 @@ with tab3:
             riga_idx = righe_selezionate[0]
             riga_corrente = df.loc[riga_idx]
 
-            st.markdown(f"### ✏️ Modifica Appuntamento (Riga {riga_idx})")
+            st.markdown(f"### ✏️ Modifica Appuntamento (Riga ID {riga_idx})")
             with st.form("form_modifica_multipla"):
                 try:
                     data_default = datetime.datetime.strptime(str(riga_corrente["Data"]), "%Y-%m-%d").date()
