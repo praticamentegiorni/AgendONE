@@ -704,50 +704,47 @@ with tab3:
                 st.markdown(card_html, unsafe_allow_html=True)
 
             # Pulsante per sincronizzare i vecchi eventi privi di Calendar_ID
-st.markdown("---")
-if st.button("🔄 Sincronizza eventi mancanti su Google Calendar", use_container_width=True):
-    # Identifica le righe che hanno Calendar_ID vuoto o nullo
-    eventi_da_sincronizzare = []
-    for idx, row in df.iterrows():
-        cal_id_esistente = row.get("Calendar_ID", "")
-        if not cal_id_esistente or str(cal_id_esistente).strip() == "" or str(cal_id_esistente).lower() == "nan":
-            eventi_da_sincronizzare.append(idx)
+        st.markdown("---")
+        if st.button("🔄 Sincronizza eventi mancanti su Google Calendar", use_container_width=True):
+            eventi_da_sincronizzare = []
+            for idx, row in df.iterrows():
+                cal_id_esistente = row.get("Calendar_ID", "")
+                if not cal_id_esistente or str(cal_id_esistente).strip() == "" or str(cal_id_esistente).lower() == "nan":
+                    eventi_da_sincronizzare.append(idx)
+                    
+            totale = len(eventi_da_sincronizzare)
             
-    totale = len(eventi_da_sincronizzare)
-    
-    if totale == 0:
-        st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
-    else:
-        barra_progresso = st.progress(0)
-        conteggio_sinc = 0
-        
-        for i, idx in enumerate(eventi_da_sincronizzare):
-            row = df.loc[idx]
-            dati_evento = {
-                "Data": str(row["Data"]),
-                "Orario Inizio": str(row["Orario Inizio"]),
-                "Orario Fine": str(row["Orario Fine"]),
-                "Classe": str(row["Classe"]),
-                "Sede": str(row["Sede"]),
-                "Modalità": str(row["Modalità"]),
-                "Note": str(row["Note"]) if pd.notnull(row["Note"]) else ""
-            }
-            
-            nuovo_id = sincronizza_google_calendar("crea", dati_evento)
-            if nuovo_id:
-                df.loc[idx, "Calendar_ID"] = nuovo_id
-                conteggio_sinc += 1
-            
-            # Aggiorna la barra di progresso
-            barra_progresso.progress((i + 1) / totale)
-        
-        if conteggio_sinc > 0:
-            salva_dati(df) # Salva in modo permanente sul foglio/database
-            st.success(f"Sincronizzati con successo {conteggio_sinc} eventi su Google Calendar!")
-            st.rerun()
-        else:
-            st.warning("Non è stato possibile sincronizzare gli eventi. Controlla la console per eventuali errori.")
-
+            if totale == 0:
+                st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
+            else:
+                barra_progresso = st.progress(0)
+                conteggio_sinc = 0
+                
+                for i, idx in enumerate(eventi_da_sincronizzare):
+                    row = df.loc[idx]
+                    dati_evento = {
+                        "Data": str(row["Data"]),
+                        "Orario Inizio": str(row["Orario Inizio"]),
+                        "Orario Fine": str(row["Orario Fine"]),
+                        "Classe": str(row["Classe"]),
+                        "Sede": str(row["Sede"]),
+                        "Modalità": str(row["Modalità"]),
+                        "Note": str(row["Note"]) if pd.notnull(row["Note"]) else ""
+                    }
+                    
+                    nuovo_id = sincronizza_google_calendar("crea", dati_evento)
+                    if nuovo_id:
+                        df.loc[idx, "Calendar_ID"] = nuovo_id
+                        conteggio_sinc += 1
+                    
+                    barra_progresso.progress((i + 1) / totale)
+                
+                if conteggio_sinc > 0:
+                    salva_dati(df)
+                    st.success(f"Sincronizzati con successo {conteggio_sinc} eventi su Google Calendar!")
+                    st.rerun()
+                else:
+                    st.warning("Non è stato possibile sincronizzare gli eventi. Controlla la console per eventuali errori.")
             df_excel = df_report.copy()
             if "Data" in df_excel.columns:
                 df_excel["Data"] = df_excel["Data_dt"].dt.strftime("%d/%m/%Y")
