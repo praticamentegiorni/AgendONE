@@ -144,13 +144,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                 'dateTime': end_datetime,
                 'timeZone': 'Europe/Rome',
             },
-            'reminders': {
-                'useDefault': False,
-                'overrides': [
-                    {'method': 'popup', 'minutes': 30},
-                    {'method': 'popup', 'minutes': 10},
-                ],
-            },
         }
 
         if azione == "crea":
@@ -163,9 +156,9 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             service.events().delete(calendarId=calendar_id, calendarEventId=evento_id_esistente).execute()
             return None
     except Exception as e:
-        print(f"Errore Calendar: {e}")
+        # Mostra l'errore direttamente a schermo nell'app Streamlit per diagnosticarlo
+        st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
-
 # Gestione configurazione tabelle
 def carica_config():
     default_config = {
