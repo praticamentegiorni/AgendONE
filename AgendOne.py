@@ -310,15 +310,15 @@ with tab1:
         submit_button = st.form_submit_button(label="💾 Salva Attività", use_container_width=True)
 
         if submit_button:
-            val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-            val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
-            val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
+            val_classe = nuova_classe_libera.strip() if nueva_classe_libera else classe if 'nueva_classe_libera' in locals() and nueva_classe_libera else nuova_classe_libera.strip() if 'nuova_classe_libera' in locals() and nuova_classe_libera else classe
+            val_sede = nuova_sede_libera.strip() if 'nuova_sede_libera' in locals() and nuova_sede_libera else sede
+            val_modalita = nuovo_mod_libero.strip() if 'nuovo_mod_libero' in locals() and nuovo_mod_libero else modalita
 
-            if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
+            if 'nuova_classe_libera' in locals() and nuova_classe_libera and nuova_classe_libera not in config["classi"]:
                 config["classi"].append(nuova_classe_libera)
-            if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
+            if 'nuova_sede_libera' in locals() and nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
                 config["sedi"].append(nuova_sede_libera)
-            if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
+            if 'nuovo_mod_libero' in locals() and nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
                 config["modalita"].append(nuovo_mod_libero)
             salva_config(config)
 
@@ -455,7 +455,7 @@ with tab3:
 
         righe_selezionate = df_editato[df_editato["Seleziona"] == True]["ID"].tolist()
 
-        col_act1, col_act2 = st.columns(2)
+        col_act1, col_act2, col_act3 = st.columns(3)
         with col_act1:
             if st.button("🗑️ Elimina Selezionati", type="primary", use_container_width=True):
                 if righe_selezionate:
@@ -499,6 +499,31 @@ with tab3:
                     st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
                 else:
                     st.warning("Seleziona un appuntamento da duplicare.")
+        with col_act3:
+            if st.button("🔄 Sincronizza Non Sincronizzati", use_container_width=True):
+                sinc_count = 0
+                for idx, row in df.iterrows():
+                    cal_id = row.get("Calendar_ID", "")
+                    if not cal_id or str(cal_id).strip() == "":
+                        dati_evento = {
+                            "Data": str(row["Data"]),
+                            "Orario Inizio": str(row["Orario Inizio"]),
+                            "Orario Fine": str(row["Orario Fine"]),
+                            "Classe": str(row["Classe"]),
+                            "Sede": str(row["Sede"]),
+                            "Modalità": str(row["Modalità"]),
+                            "Note": str(row["Note"]) if pd.notnull(row["Note"]) else ""
+                        }
+                        new_id = sincronizza_google_calendar("crea", dati_evento)
+                        if new_id:
+                            df.loc[idx, "Calendar_ID"] = new_id
+                            sinc_count += 1
+                if sinc_count > 0:
+                    salva_dati(df)
+                    st.success(f"Sincronizzati con successo {sinc_count} eventi mancanti su Google Calendar!")
+                    st.rerun()
+                else:
+                    st.info("Tutti gli eventi risultano già sincronizzati.")
 
         st.markdown("---")
 
@@ -655,6 +680,39 @@ with tab3:
         ore_totali = df_report["Ore"].sum()
 
         st.markdown(f"Risultati filtrati: **{len(df_report)}** attività | Ore totali: **{ore_totali:.2f} ore**")
+
+        # Pulsanti di download del report
+        if not df_report.empty:
+            col_dwn1, col_dwn2 = st.columns(2)
+            with col_dwn1:
+                csv_data = df_report.drop(columns=["Data_dt"], errors="ignore").to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Scarica Report in CSV",
+                    data=csv_data,
+                    file_name=f"report_attivita_{datetime.date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            with col_dwn2:
+                # Generazione file di riepilogo testuale formattato
+                summary_text = f"REPORT ATTIVITÀ - {datetime.date.today().strftime('%d/%m/%Y')}\n"
+                summary_text += f"Totale Attività: {len(df_report)}\n"
+                summary_text += f"Ore Complessive: {ore_totali:.2f}\n"
+                summary_text += "="*40 + "\n\n"
+                for _, r in df_report.iterrows():
+                    summary_text += f"Data: {r.get('Data')} | Orario: {r.get('Orario Inizio')}-{r.get('Orario Fine')} ({r.get('Ore')}h)\n"
+                    summary_text += f"Classe: {r.get('Classe')} | Sede: {r.get('Sede')} | Modalità: {r.get('Modalità')}\n"
+                    if pd.notnull(r.get('Note')) and str(r.get('Note')).strip() != "":
+                        summary_text += f"Note: {r.get('Note')}\n"
+                    summary_text += "-"*30 + "\n"
+                
+                st.download_button(
+                    label="📄 Scarica Riepilogo Testuale",
+                    data=summary_text.encode('utf-8'),
+                    file_name=f"riepilogo_attivita_{datetime.date.today().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
 
         if not df_report.empty:
             st.markdown("---")
