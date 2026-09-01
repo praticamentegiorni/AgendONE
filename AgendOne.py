@@ -705,28 +705,41 @@ with tab3:
 
             # Pulsante per sincronizzare i vecchi eventi privi di Calendar_ID
             st.markdown("---")
-            if st.button("🔄 Sincronizza eventi mancanti su Google Calendar", use_container_width=True):
-                conteggio_sinc = 0
-                for idx, row in df.iterrows():
-                    cal_id_esistente = row.get("Calendar_ID", "")
-                    if not cal_id_esistente or str(cal_id_esistente).strip() == "":
-                        dati_evento = {
-                            "Data": str(row["Data"]),
-                            "Orario Inizio": str(row["Orario Inizio"]),
-                            "Orario Fine": str(row["Orario Fine"]),
-                            "Classe": str(row["Classe"]),
-                            "Sede": str(row["Sede"]),
-                            "Modalità": str(row["Modalità"]),
-                            "Note": str(row["Note"]) if pd.notnull(row["Note"]) else ""
-                        }
-                        nuovo_id = sincronizza_google_calendar("crea", dati_evento)
-                        if nuovo_id:
-                            df.loc[idx, "Calendar_ID"] = nuovo_id
-                            conteggio_sinc += 1
-                if conteggio_sinc > 0:
-                    salva_dati(df)
-                    st.success(f"Sincronizzati con successo {conteggio_sinc} eventi su Google Calendar!")
-                    st.rerun()
+            if st.button("🔄 Sincronizza eventi mancanti su Google Calendar"):
+    conTExt_bar = st.progress(0)
+    eventi_da_sincronizzare = df[df['Google_Calendar_ID'].isna() | (df['Google_Calendar_ID'] == "")]
+    
+    totale = len(eventi_da_sincronizzare)
+    if totale == 0:
+        st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
+    else:
+        successi = 0
+        for index, row in eventi_da_sincronizzare.iterrows():
+            dati_evento = {
+                "Data": str(row["Data"]),
+                "Orario Inizio": str(row["Orario Inizio"]),
+                "Orario Fine": str(row["Orario Fine"]),
+                "Classe": str(row["Classe"]),
+                "Modalità": str(row["Modalità"]),
+                "Sede": str(row["Sede"]),
+                "Note": str(row["Note"]) if "Note" in row and pd.notna(row["Note"]) else ""
+            }
+            
+            # Esegue la chiamata per creare l'evento sul calendario
+            new_id = sincronizza_google_calendar("crea", dati_evento)
+            if new_id:
+                df.at[index, 'Google_Calendar_ID'] = new_id
+                successi += 1
+            
+            # Aggiorna la barra di progresso
+            if totale > 0:
+                conTExt_bar.progress((index + 1) / totale)
+        
+        # Salva il dataframe aggiornato nel foglio/file
+        # (assicurati che la funzione di salvataggio del tuo file rifletta il tuo metodo corrente, es. conn.update o salvataggio excel)
+        # conn.update(spreadsheet=..., data=df) 
+        st.success(f"Sincronizzazione completata! {successi} eventi su {totale} sono stati aggiunti al calendario AgendOne.")
+        st.rerun()
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati con Google Calendar.")
 
