@@ -744,6 +744,24 @@ with tab3:
             buffer_excel = io.BytesIO()
             with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False, sheet_name='Report')
+                
+                # Accesso all'oggetto workbook e worksheet di xlsxwriter per formattare le colonne
+                workbook = writer.book
+                worksheet = writer.sheets['Report']
+                
+                # Formato opzionale per allineare o gestire il testo se necessario
+                formato_testo = workbook.add_format({'text_wrap': True})
+
+                # Calcolo automatico della larghezza delle colonne in base al contenuto
+                for i, col in enumerate(df_export.columns):
+                    # Trova la lunghezza massima tra il nome della colonna e i dati al suo interno
+                    lunghezza_massima = max(
+                        df_export[col].astype(str).map(len).max(),
+                        len(str(col))
+                    )
+                    # Imposta la larghezza della colonna aggiungendo un piccolo margine di sicurezza (+3)
+                    worksheet.set_column(i, i, max(lunghezza_massima + 3, 12))
+                    
             buffer_excel.seek(0)
             st.download_button(
                 label="📥 Scarica Report Excel",
