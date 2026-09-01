@@ -37,14 +37,12 @@ def parse_data_italiana(val):
         return pd.NaT
     val_str = str(val).strip()
     
-    # Se la stringa è nel formato ISO YYYY-MM-DD
     if "-" in val_str and len(val_str.split("-")[0]) == 4:
         try:
             return pd.to_datetime(val_str, format="%Y-%m-%d")
         except:
             pass
             
-    # Parsing esplicito formato italiano DD/MM/YYYY o D/M/YYYY
     try:
         parti = val_str.split("/")
         if len(parti) == 3:
@@ -125,7 +123,6 @@ def carica_dati():
             return empty_df
         df = pd.DataFrame(data)
         
-        # Retrocompatibilità intestazioni
         if "Committente" in df.columns and "Classe" not in df.columns:
             df = df.rename(columns={"Committente": "Classe"})
         if "Luogo" in df.columns and "Sede" not in df.columns:
@@ -283,7 +280,6 @@ with tab3:
         if "Data" in df_vis.columns:
             df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
-            # Formattazione esplicita in stringa DD/MM/YYYY per la visualizzazione corretta
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt"]]
@@ -297,13 +293,12 @@ with tab3:
         df_mostra.insert(0, "Seleziona", False)
         df_mostra.insert(1, "ID", df_mostra.index)
 
-        # Funzione di stile per colorare le righe della tabella principale con colori più brillanti
         def colora_righe_tabella(row):
             mod = str(row.get("Modalità", "")).lower()
             if "presenza" in mod:
-                return ['background-color: #1c3d73; color: #ffffff'] * len(row)  # Blu più brillante
+                return ['background-color: #1c3d73; color: #ffffff'] * len(row)
             elif "video" in mod:
-                return ['background-color: #155c32; color: #ffffff'] * len(row)  # Verde più brillante
+                return ['background-color: #155c32; color: #ffffff'] * len(row)
             return [''] * len(row)
 
         df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
@@ -320,14 +315,34 @@ with tab3:
 
         righe_selezionate = df_editato[df_editato["Seleziona"] == True]["ID"].tolist()
 
-        if st.button("🗑️ Elimina Selezionati", type="primary", use_container_width=True):
-            if righe_selezionate:
-                df = df.drop(righe_selezionate).reset_index(drop=True)
-                salva_dati(df)
-                st.success("Righe eliminate con successo!")
-                st.rerun()
-            else:
-                st.warning("Seleziona almeno un appuntamento da eliminare.")
+        col_act1, col_act2 = st.columns(2)
+        with col_act1:
+            if st.button("🗑️ Elimina Selezionati", type="primary", use_container_width=True):
+                if righe_selezionate:
+                    df = df.drop(righe_selezionate).reset_index(drop=True)
+                    salva_dati(df)
+                    st.success("Righe eliminate con successo!")
+                    st.rerun()
+                else:
+                    st.warning("Seleziona almeno un appuntamento da eliminare.")
+        with col_act2:
+            if st.button("📋 Duplica Selezionato", use_container_width=True):
+                if len(righe_selezionate) == 1:
+                    riga_idx = righe_selezionate[0]
+                    nuova_riga = df.loc[riga_idx].copy()
+                    if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
+                        nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
+                    else:
+                        nuova_riga["Note"] = "Copia"
+                    
+                    df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
+                    salva_dati(df)
+                    st.success("Appuntamento duplicato con successo!")
+                    st.rerun()
+                elif len(righe_selezionate) > 1:
+                    st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
+                else:
+                    st.warning("Seleziona un appuntamento da duplicare.")
 
         st.markdown("---")
 
@@ -493,16 +508,15 @@ with tab3:
                 orario_f = str(row["Orario Fine"])
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
-                # Assegnazione colori più brillanti per la presenza (blu vivace) e la videolezione (verde vivace)
                 mod_lower = modalita.lower()
                 if "presenza" in mod_lower:
-                    bg_color = "#1c3d73"  # Blu brillante
+                    bg_color = "#1c3d73"
                     border_color = "#3b73c4"
                 elif "video" in mod_lower:
-                    bg_color = "#155c32"  # Verde brillante
+                    bg_color = "#155c32"
                     border_color = "#28a456"
                 else:
-                    bg_color = "#1e1e1e"  # Default
+                    bg_color = "#1e1e1e"
                     border_color = "#333333"
 
                 card_html = f"""
