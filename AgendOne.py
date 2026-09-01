@@ -285,8 +285,8 @@ with tab3:
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
-            # Ordinamento di base per data (crescente)
-            df_vis = df_vis.sort_values(by="Data_dt", ascending=True)
+            # Ordinamento di base per data e poi per orario d'inizio (crescenti)
+            df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
             
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale"]]
             df_vis = df_vis[cols + ["ID_originale"]]
@@ -474,7 +474,12 @@ with tab3:
 
         colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
         if colonna_ordinamento in df_report.columns:
-            df_report = df_report.sort_values(by=colonna_ordinamento, ascending=crescente)
+            if colonna_ordinamento == "Data_dt":
+                # Ordinamento primario per data e secondario per orario
+                df_report = df_report.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[crescente, True])
+            else:
+                # Ordinamento primario per campo scelto e secondario per data
+                df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
 
         ore_totali = 0.0
         for _, row in df_report.iterrows():
