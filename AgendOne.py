@@ -151,6 +151,15 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'dateTime': end_datetime,
                     'timeZone': 'Europe/Rome',
                 },
+                # === AGGIUNTA PER LE NOTIFICHE AUTOMATICHE ===
+                'reminders': {
+                    'useDefault': False,  # Disattiva i promemoria predefiniti del calendario
+                    'overrides': [
+                        {'method': 'popup', 'minutes': 240},  # 240 minuti = 4 ore prima
+                        # Se vuoi anche un promemoria via email, puoi aggiungere un'altra riga:
+                        # {'method': 'email', 'minutes': 240},
+                    ],
+                },
             }
 
         if azione == "crea":
