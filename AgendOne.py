@@ -157,6 +157,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'useDefault': False,
                     'overrides': [
                         {'method': 'popup', 'minutes': minuti_promemoria},
+                        {'method': 'email', 'minutes': 60},
                     ],
                 },
             }
@@ -327,11 +328,11 @@ with tab1:
         with col_o1:
             ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9)
         with col_o2:
-            min_i = st.selectbox("Minuti Inizio", options=[0, 15, 30, 45], index=0)
+            min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=0)
         with col_o3:
             ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=18)
         with col_o4:
-            min_f = st.selectbox("Minuti Fine", options=[0, 15, 30, 45], index=0)
+            min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=0)
 
         orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
         orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
@@ -359,50 +360,53 @@ with tab1:
         submit_button = st.form_submit_button(label="💾 Salva Attività", use_container_width=True)
 
         if submit_button:
-            val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-            val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
-            val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
+            if orario_inizio_str >= orario_fine_str:
+                st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
+            else:
+                val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
+                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
+                val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
-            if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
-                config["classi"].append(nuova_classe_libera)
-            if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
-                config["sedi"].append(nuova_sede_libera)
-            if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
-                config["modalita"].append(nuovo_mod_libero)
-            salva_config(config)
+                if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
+                    config["classi"].append(nuova_classe_libera)
+                if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
+                    config["sedi"].append(nuova_sede_libera)
+                if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
+                    config["modalita"].append(nuovo_mod_libero)
+                salva_config(config)
 
-            dati_evento = {
-                "Data": data_selezionata.strftime("%Y-%m-%d"),
-                "Orario Inizio": orario_inizio_str,
-                "Orario Fine": orario_fine_str,
-                "Classe": val_classe,
-                "Sede": val_sede,
-                "Modalità": val_modalita,
-                "Note": note,
-                "Reminder_Minuti": minuti_scelti
-            }
-            
-            cal_id = sincronizza_google_calendar("crea", dati_evento)
+                dati_evento = {
+                    "Data": data_selezionata.strftime("%Y-%m-%d"),
+                    "Orario Inizio": orario_inizio_str,
+                    "Orario Fine": orario_fine_str,
+                    "Classe": val_classe,
+                    "Sede": val_sede,
+                    "Modalità": val_modalita,
+                    "Note": note,
+                    "Reminder_Minuti": minuti_scelti
+                }
+                
+                cal_id = sincronizza_google_calendar("crea", dati_evento)
 
-            nuovo_dato = pd.DataFrame({
-                "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                "Mese": [mese_str],
-                "Orario Inizio": [orario_inizio_str],
-                "Orario Fine": [orario_fine_str],
-                "Ore": [ore_calcolate],
-                "Classe": [val_classe],
-                "Sede": [val_sede],
-                "Modalità": [val_modalita],
-                "Svolto": [svolto_iniziale],
-                "Note": [note],
-                "Calendar_ID": [str(cal_id) if cal_id else ""],
-                "Reminder_Minuti": [minuti_scelti]
-            })
+                nuovo_dato = pd.DataFrame({
+                    "Data": [data_selezionata.strftime("%Y-%m-%d")],
+                    "Mese": [mese_str],
+                    "Orario Inizio": [orario_inizio_str],
+                    "Orario Fine": [orario_fine_str],
+                    "Ore": [ore_calcolate],
+                    "Classe": [val_classe],
+                    "Sede": [val_sede],
+                    "Modalità": [val_modalita],
+                    "Svolto": [svolto_iniziale],
+                    "Note": [note],
+                    "Calendar_ID": [str(cal_id) if cal_id else ""],
+                    "Reminder_Minuti": [minuti_scelti]
+                })
 
-            df = pd.concat([df, nuovo_dato], ignore_index=True)
-            salva_dati(df)
-            st.success("Attività salvata e sincronizzata con Google Calendar!")
-            st.rerun()
+                df = pd.concat([df, nuovo_dato], ignore_index=True)
+                salva_dati(df)
+                st.success("Attività salvata e sincronizzata con Google Calendar!")
+                st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE =================
 with tab2:
@@ -583,11 +587,11 @@ with tab3:
                 with c_mo1:
                     mod_ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=h_def_i if h_def_i in range(0, 24) else 9)
                 with c_mo2:
-                    mod_min_i = st.selectbox("Minuti Inizio", options=[0, 15, 30, 45], index=[0, 15, 30, 45].index(m_def_i) if m_def_i in [0, 15, 30, 45] else 0)
+                    mod_min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=m_def_i if m_def_i in range(0, 60) else 0)
                 with c_mo3:
                     mod_ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=h_def_f if h_def_f in range(0, 24) else 18)
                 with c_mo4:
-                    mod_min_f = st.selectbox("Minuti Fine", options=[0, 15, 30, 45], index=[0, 15, 30, 45].index(m_def_f) if m_def_f in [0, 15, 30, 45] else 0)
+                    mod_min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=m_def_f if m_def_f in range(0, 60) else 0)
 
                 mod_orario_i_str = f"{mod_ora_i:02d}:{mod_min_i:02d}"
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
@@ -608,40 +612,43 @@ with tab3:
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
 
                 if st.form_submit_button("💾 Salva Modifiche", use_container_width=True):
-                    df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
-                    df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
-                    df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
-                    df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
-                    df.loc[riga_idx, "Ore"] = mod_ore_calc
-                    df.loc[riga_idx, "Classe"] = mod_classe
-                    df.loc[riga_idx, "Sede"] = mod_sede
-                    df.loc[riga_idx, "Modalità"] = mod_modalita
-                    df.loc[riga_idx, "Svolto"] = mod_svolto
-                    df.loc[riga_idx, "Note"] = mod_note
-                    df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
-
-                    dati_evento = {
-                        "Data": mod_data.strftime("%Y-%m-%d"),
-                        "Orario Inizio": mod_orario_i_str,
-                        "Orario Fine": mod_orario_f_str,
-                        "Classe": mod_classe,
-                        "Sede": mod_sede,
-                        "Modalità": mod_modalita,
-                        "Note": mod_note,
-                        "Reminder_Minuti": minuti_scelti_mod
-                    }
-
-                    cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                    if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
-                        res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
-                        df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                    if mod_orario_i_str >= mod_orario_f_str:
+                        st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                     else:
-                        cal_id = sincronizza_google_calendar("crea", dati_evento)
-                        df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+                        df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
+                        df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
+                        df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
+                        df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
+                        df.loc[riga_idx, "Ore"] = mod_ore_calc
+                        df.loc[riga_idx, "Classe"] = mod_classe
+                        df.loc[riga_idx, "Sede"] = mod_sede
+                        df.loc[riga_idx, "Modalità"] = mod_modalita
+                        df.loc[riga_idx, "Svolto"] = mod_svolto
+                        df.loc[riga_idx, "Note"] = mod_note
+                        df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
 
-                    salva_dati(df)
-                    st.success("Modifiche salvate e calendario aggiornato!")
-                    st.rerun()
+                        dati_evento = {
+                            "Data": mod_data.strftime("%Y-%m-%d"),
+                            "Orario Inizio": mod_orario_i_str,
+                            "Orario Fine": mod_orario_f_str,
+                            "Classe": mod_classe,
+                            "Sede": mod_sede,
+                            "Modalità": mod_modalita,
+                            "Note": mod_note,
+                            "Reminder_Minuti": minuti_scelti_mod
+                        }
+
+                        cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
+                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                            res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
+                            df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                        else:
+                            cal_id = sincronizza_google_calendar("crea", dati_evento)
+                            df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+
+                        salva_dati(df)
+                        st.success("Modifiche salvate e calendario aggiornato!")
+                        st.rerun()
 
         # ================= REPORT =================
         st.markdown("---")
