@@ -101,7 +101,7 @@ def get_gspread_client_and_sheet():
     except Exception as e:
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar (con gestione errori 404)
+# Funzione per sincronizzare l'evento su Google Calendar (con gestione errori 404 e promemoria dinamico)
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
@@ -139,6 +139,8 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
+            minuti_promemoria = int(dati_evento.get("Reminder_Minuti", 240))
+
             body = {
                 'summary': f"Lezione/Impegno: {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
@@ -151,13 +153,10 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'dateTime': end_datetime,
                     'timeZone': 'Europe/Rome',
                 },
-                # === AGGIUNTA PER LE NOTIFICHE AUTOMATICHE ===
                 'reminders': {
-                    'useDefault': False,  # Disattiva i promemoria predefiniti del calendario
+                    'useDefault': False,
                     'overrides': [
-                        {'method': 'popup', 'minutes': 240},  # 240 minuti = 4 ore prima
-                        # Se vuoi anche un promemoria via email, puoi aggiungere un'altra riga:
-                        # {'method': 'email', 'minutes': 240},
+                        {'method': 'popup', 'minutes': minuti_promemoria},
                     ],
                 },
             }
@@ -220,7 +219,7 @@ config = carica_config()
 
 # Caricamento dati da Google Sheets
 def carica_dati():
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -254,6 +253,11 @@ def carica_dati():
             df["Calendar_ID"] = ""
         else:
             df["Calendar_ID"] = df["Calendar_ID"].fillna("").astype(str)
+
+        if "Reminder_Minuti" not in df.columns:
+            df["Reminder_Minuti"] = 240
+        else:
+            df["Reminder_Minuti"] = pd.to_numeric(df["Reminder_Minuti"], errors="coerce").fillna(240).astype(int)
             
         if "Ore" not in df.columns or df["Ore"].isna().all():
             df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
@@ -270,7 +274,7 @@ def carica_dati():
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
     for c in cols_standard:
         if c not in df_to_save.columns:
             df_to_save[c] = ""
@@ -297,6 +301,15 @@ tab1, tab2, tab3 = st.tabs([
     "⚙️ Gestione Tabelle & Combo",
     "📊 Archivio, Modifica, Report & Riepilogo",
 ])
+
+opzioni_promemoria = {
+    "15 minuti prima": 15,
+    "30 minuti prima": 30,
+    "1 ora prima": 60,
+    "2 ore prima": 120,
+    "4 ore prima": 240,
+    "1 giorno prima": 1440
+}
 
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
@@ -337,6 +350,9 @@ with tab1:
             modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
+        scelta_prom_label = st.selectbox("⏰ Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=4)
+        minuti_scelti = opzioni_promemoria[scelta_prom_label]
+
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
 
@@ -362,7 +378,8 @@ with tab1:
                 "Classe": val_classe,
                 "Sede": val_sede,
                 "Modalità": val_modalita,
-                "Note": note
+                "Note": note,
+                "Reminder_Minuti": minuti_scelti
             }
             
             cal_id = sincronizza_google_calendar("crea", dati_evento)
@@ -378,7 +395,8 @@ with tab1:
                 "Modalità": [val_modalita],
                 "Svolto": [svolto_iniziale],
                 "Note": [note],
-                "Calendar_ID": [str(cal_id) if cal_id else ""]
+                "Calendar_ID": [str(cal_id) if cal_id else ""],
+                "Reminder_Minuti": [minuti_scelti]
             })
 
             df = pd.concat([df, nuovo_dato], ignore_index=True)
@@ -438,7 +456,7 @@ with tab3:
             df_vis["Ore"] = df_vis.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
             df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
             
-            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID"]]
+            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
             df_vis = df_vis[cols + ["ID_originale"]]
 
         filtro = st.text_input("🔍 Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
@@ -519,7 +537,8 @@ with tab3:
                         "Classe": str(nuova_riga["Classe"]),
                         "Sede": str(nuova_riga["Sede"]),
                         "Modalità": str(nuova_riga["Modalità"]),
-                        "Note": str(nuova_riga["Note"])
+                        "Note": str(nuova_riga["Note"]),
+                        "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240))
                     }
                     cal_id = sincronizza_google_calendar("crea", dati_evento)
                     nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
@@ -578,6 +597,11 @@ with tab3:
                 mod_sede = st.text_input("Sede", value=str(riga_corrente["Sede"]))
                 mod_modalita = st.text_input("Modalità", value=str(riga_corrente["Modalità"]))
                 
+                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
+                indice_default_rem = list(opzioni_promemoria.values()).index(attuale_minuti) if attuale_minuti in opzioni_promemoria.values() else 4
+                scelta_prom_mod_label = st.selectbox("⏰ Modifica Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria")
+                minuti_scelti_mod = opzioni_promemoria[scelta_prom_mod_label]
+
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
                 
@@ -594,6 +618,7 @@ with tab3:
                     df.loc[riga_idx, "Modalità"] = mod_modalita
                     df.loc[riga_idx, "Svolto"] = mod_svolto
                     df.loc[riga_idx, "Note"] = mod_note
+                    df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
 
                     dati_evento = {
                         "Data": mod_data.strftime("%Y-%m-%d"),
@@ -602,7 +627,8 @@ with tab3:
                         "Classe": mod_classe,
                         "Sede": mod_sede,
                         "Modalità": mod_modalita,
-                        "Note": mod_note
+                        "Note": mod_note,
+                        "Reminder_Minuti": minuti_scelti_mod
                     }
 
                     cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
@@ -754,21 +780,12 @@ with tab3:
             with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False, sheet_name='Report')
                 
-                # Accesso all'oggetto workbook e worksheet di xlsxwriter per formattare le colonne
-                workbook = writer.book
                 worksheet = writer.sheets['Report']
-                
-                # Formato opzionale per allineare o gestire il testo se necessario
-                formato_testo = workbook.add_format({'text_wrap': True})
-
-                # Calcolo automatico della larghezza delle colonne in base al contenuto
                 for i, col in enumerate(df_export.columns):
-                    # Trova la lunghezza massima tra il nome della colonna e i dati al suo interno
                     lunghezza_massima = max(
                         df_export[col].astype(str).map(len).max(),
                         len(str(col))
                     )
-                    # Imposta la larghezza della colonna aggiungendo un piccolo margine di sicurezza (+3)
                     worksheet.set_column(i, i, max(lunghezza_massima + 3, 12))
                     
             buffer_excel.seek(0)
@@ -793,7 +810,8 @@ with tab3:
                             "Classe": str(row["Classe"]),
                             "Sede": str(row["Sede"]),
                             "Modalità": str(row["Modalità"]),
-                            "Note": str(row["Note"])
+                            "Note": str(row["Note"]),
+                            "Reminder_Minuti": int(row.get("Reminder_Minuti", 240))
                         }
                         nuovo_id = sincronizza_google_calendar("crea", dati_evento)
                         if nuovo_id:
