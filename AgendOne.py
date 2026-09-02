@@ -327,11 +327,11 @@ with tab1:
         with col_o1:
             ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9)
         with col_o2:
-            min_i = st.selectbox("Minuti Inizio", options=[0, 15, 30, 45], index=0)
+            min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=0)
         with col_o3:
             ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=18)
         with col_o4:
-            min_f = st.selectbox("Minuti Fine", options=[0, 15, 30, 45], index=0)
+            min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=0)
 
         orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
         orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
@@ -583,11 +583,11 @@ with tab3:
                 with c_mo1:
                     mod_ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=h_def_i if h_def_i in range(0, 24) else 9)
                 with c_mo2:
-                    mod_min_i = st.selectbox("Minuti Inizio", options=[0, 15, 30, 45], index=[0, 15, 30, 45].index(m_def_i) if m_def_i in [0, 15, 30, 45] else 0)
+                    mod_min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=m_def_i if m_def_i in range(0, 60) else 0)
                 with c_mo3:
                     mod_ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=h_def_f if h_def_f in range(0, 24) else 18)
                 with c_mo4:
-                    mod_min_f = st.selectbox("Minuti Fine", options=[0, 15, 30, 45], index=[0, 15, 30, 45].index(m_def_f) if m_def_f in [0, 15, 30, 45] else 0)
+                    mod_min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=m_def_f if m_def_f in range(0, 60) else 0)
 
                 mod_orario_i_str = f"{mod_ora_i:02d}:{mod_min_i:02d}"
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
@@ -683,143 +683,3 @@ with tab3:
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
             df_report["Data_dt"] = df_report["Data"].apply(parse_data_italiana)
-        df_report["Ore"] = df_report.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
-
-        if data_inizio_filtro:
-            df_report = df_report[df_report["Data_dt"] >= pd.to_datetime(data_inizio_filtro)]
-        if data_fine_filtro:
-            df_report = df_report[df_report["Data_dt"] <= pd.to_datetime(data_fine_filtro)]
-
-        if filtro_classe != "Tutti":
-            df_report = df_report[df_report["Classe"] == filtro_classe]
-        if filtro_sede != "Tutti":
-            df_report = df_report[df_report["Sede"] == filtro_sede]
-        if filtro_modalita != "Tutti":
-            df_report = df_report[df_report["Modalità"] == filtro_modalita]
-
-        if ricerca_libera:
-            termini = [t.strip() for t in ricerca_libera.split(",") if t.strip()]
-            if termini:
-                def match_multipli(row):
-                    riga_str = " ".join(row.astype(str).values).lower()
-                    return any(termine.lower() in riga_str for termine in termini)
-                df_report = df_report[df_report.apply(match_multipli, axis=1)]
-
-        colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
-        if colonna_ordinamento in df_report.columns:
-            if colonna_ordinamento == "Data_dt":
-                df_report = df_report.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[crescente, True])
-            else:
-                df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
-
-        ore_totali = df_report["Ore"].sum()
-
-        st.markdown(f"Risultati filtrati: **{len(df_report)}** attività | Ore totali: **{ore_totali:.2f} ore**")
-
-        if not df_report.empty:
-            st.markdown("---")
-            st.markdown("### 📋 Elenco Attività in Evidenza")
-
-            for _, row in df_report.iterrows():
-                parsed_dt = parse_data_italiana(row["Data"])
-                data_formattata = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row["Data"])
-                classe = str(row["Classe"])
-                sede = str(row["Sede"])
-                modalita = str(row["Modalità"])
-                orario_i = str(row["Orario Inizio"])
-                orario_f = str(row["Orario Fine"])
-                ore_val = row["Ore"]
-                svolto_card = bool(row["Svolto"]) if "Svolto" in row else False
-                note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
-
-                if svolto_card:
-                    bg_color = "#2b2b2b"
-                    border_color = "#444444"
-                    text_style = "color: #7f7f7f; text-decoration: line-through;"
-                else:
-                    mod_lower = modalita.lower()
-                    if "presenza" in mod_lower:
-                        bg_color = "#1c3d73"
-                        border_color = "#3b73c4"
-                    elif "video" in mod_lower:
-                        bg_color = "#155c32"
-                        border_color = "#2fa866"
-                    else:
-                        bg_color = "#262626"
-                        border_color = "#555555"
-                    text_style = "color: #ffffff;"
-
-                st.markdown(
-                    f"""
-                    <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
-                        <strong>📅 {data_formattata}</strong> | ⏰ {orario_i} - {orario_f} ({ore_val:.2f}h)<br>
-                        <strong>🏫 Classe/Committente:</strong> {classe} | <strong>📍 Sede:</strong> {sede} | <strong>💻 Modalità:</strong> {modalita}<br>
-                        <em>📝 Note:</em> {note if note else 'Nessuna nota'}
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # Pulsanti di Esportazione e Sincronizzazione Massiva
-        st.markdown("---")
-        c_exp1, c_exp2, c_exp3 = st.columns(3)
-
-        with c_exp1:
-            df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
-            csv_data = df_export.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Scarica Report CSV",
-                data=csv_data,
-                file_name="report_attivita.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-
-        with c_exp2:
-            buffer_excel = io.BytesIO()
-            with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
-                df_export.to_excel(writer, index=False, sheet_name='Report')
-                
-                worksheet = writer.sheets['Report']
-                for i, col in enumerate(df_export.columns):
-                    lunghezza_massima = max(
-                        df_export[col].astype(str).map(len).max(),
-                        len(str(col))
-                    )
-                    worksheet.set_column(i, i, max(lunghezza_massima + 3, 12))
-                    
-            buffer_excel.seek(0)
-            st.download_button(
-                label="📥 Scarica Report Excel",
-                data=buffer_excel,
-                file_name="report_attivita.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-        with c_exp3:
-            if st.button("🔄 Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
-                count_sinc = 0
-                for idx, row in df.iterrows():
-                    cal_id = str(row.get("Calendar_ID", ""))
-                    if not cal_id or cal_id.lower() in ["nan", "none", ""]:
-                        dati_evento = {
-                            "Data": str(row["Data"]),
-                            "Orario Inizio": str(row["Orario Inizio"]),
-                            "Orario Fine": str(row["Orario Fine"]),
-                            "Classe": str(row["Classe"]),
-                            "Sede": str(row["Sede"]),
-                            "Modalità": str(row["Modalità"]),
-                            "Note": str(row["Note"]),
-                            "Reminder_Minuti": int(row.get("Reminder_Minuti", 240))
-                        }
-                        nuovo_id = sincronizza_google_calendar("crea", dati_evento)
-                        if nuovo_id:
-                            df.loc[idx, "Calendar_ID"] = str(nuovo_id)
-                            count_sinc += 1
-                if count_sinc > 0:
-                    salva_dati(df)
-                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
-                    st.rerun()
-                else:
-                    st.info("Tutti gli eventi risultano già sincronizzati.")
