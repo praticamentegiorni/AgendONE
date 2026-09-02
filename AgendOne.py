@@ -101,7 +101,7 @@ def get_gspread_client_and_sheet():
     except Exception as e:
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar (con gestione errori 404 e promemoria dinamico)
+# Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
@@ -139,8 +139,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
-            minuti_promemoria = int(dati_evento.get("Reminder_Minuti", 240))
-
             body = {
                 'summary': f"Lezione/Impegno: {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
@@ -154,11 +152,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'timeZone': 'Europe/Rome',
                 },
                 'reminders': {
-                    'useDefault': False,
-                    'overrides': [
-                        {'method': 'popup', 'minutes': minuti_promemoria},
-                        {'method': 'email', 'minutes': 60},
-                    ],
+                    'useDefault': True,
                 },
             }
 
@@ -351,7 +345,7 @@ with tab1:
             modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        scelta_prom_label = st.selectbox("⏰ Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=4)
+        scelta_prom_label = st.selectbox("⏰ Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=4, disabled=True)
         minuti_scelti = opzioni_promemoria[scelta_prom_label]
 
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
@@ -603,7 +597,7 @@ with tab3:
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 indice_default_rem = list(opzioni_promemoria.values()).index(attuale_minuti) if attuale_minuti in opzioni_promemoria.values() else 4
-                scelta_prom_mod_label = st.selectbox("⏰ Modifica Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria")
+                scelta_prom_mod_label = st.selectbox("⏰ Modifica Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria", disabled=True)
                 minuti_scelti_mod = opzioni_promemoria[scelta_prom_mod_label]
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
