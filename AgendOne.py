@@ -14,14 +14,21 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        /* Fissa i tab di navigazione principali in alto durante lo scroll */
+        /* Fissa la barra dei tab in cima allo schermo */
         div[data-testid="stTabs"] {
-            position: sticky;
-            top: 40px; /* Regola questa distanza in base alla barra superiore di Streamlit */
-            z-index: 999;
+            position: fixed;
+            top: 3.8rem; /* Altezza appena sotto la barra superiore di Streamlit */
+            left: 0;
+            right: 0;
+            z-index: 99999;
             background-color: var(--background-color);
-            padding-top: 10px;
-            padding-bottom: 5px;
+            padding: 10px 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Aggiunge margine in alto al contenitore principale per evitare che il contenuto finisca sotto i tab fissi */
+        .main .block-container {
+            padding-top: 7rem;
         }
     </style>
     """,
