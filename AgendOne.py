@@ -75,87 +75,115 @@ def calcola_ore(ora_inizio, ora_fine):
     return max(0.0, round(diff, 2))
 
 # Funzione per generare il Report in formato PDF professionale con parziali per classe
+# Funzione per generare il Report in formato PDF professionale con colonne adattive e a capo automatico
 def genera_pdf_report(df_report):
     try:
-        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
         
+        # Utilizziamo il formato A4 Orizzontale (Landscape) per massimizzare lo spazio orizzontale
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=landscape(A4), 
+            rightMargin=20, 
+            leftMargin=20, 
+            topMargin=20, 
+            bottomMargin=20
+        )
         elements = []
         
         styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1c3d73'), spaceAfter=10)
-        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#333333'), spaceAfter=6)
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor('#1c3d73'), spaceAfter=6)
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=4)
+        
+        # Stili per le celle delle tabelle per gestire il testo a capo
+        th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
+        td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
+        td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
-        elements.append(Spacer(1, 10))
+        elements.append(Spacer(1, 6))
         
-        # Tabella dei totali parziali raggruppati per Classe / Committente
+        # --- TABELLA RIEPILOGO PARZIALI PER CLASSE ---
         elements.append(Paragraph("Riepilogo Parziali per Classe / Committente", subtitle_style))
         if not df_report.empty and "Classe" in df_report.columns and "Ore" in df_report.columns:
             df_summary = df_report.groupby("Classe")["Ore"].sum().reset_index()
-            summary_data = [["Classe / Committente", "Ore Totali Parziali"]]
-            for _, row in df_summary.iterrows():
-                summary_data.append([str(row["Classe"]), f"{row['Ore']:.2f} h"])
+            summary_data = [[Paragraph("Classe / Committente", th_style), Paragraph("Ore Totali Parziali", th_style)]]
             
-            t_summary = Table(summary_data, colWidths=[350, 185])
+            for _, row in df_summary.iterrows():
+                summary_data.append([
+                    Paragraph(str(row["Classe"]), td_summary_style),
+                    Paragraph(f"{row['Ore']:.2f} h", td_summary_style)
+                ])
+            
+            # Larghezze ottimizzate per A4 orizzontale (Totale ~800pt)
+            t_summary = Table(summary_data, colWidths=[600, 180])
             t_summary.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c3d73')),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,-1), 10),
-                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
                 ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f9f9f9')),
                 ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
             ]))
             elements.append(t_summary)
         
-        elements.append(Spacer(1, 15))
+        elements.append(Spacer(1, 10))
         elements.append(Paragraph("Elenco Dettagliato Attività", subtitle_style))
         
+        # --- TABELLA DETTAGLIATA ATTIVITÀ ---
         if not df_report.empty:
-            det_data = [["Data", "Orario", "Classe", "Sede", "Modalità", "Ore"]]
+            det_data = [[
+                Paragraph("Data", th_style),
+                Paragraph("Orario", th_style),
+                Paragraph("Classe / Committente", th_style),
+                Paragraph("Sede", th_style),
+                Paragraph("Modalità", th_style),
+                Paragraph("Note / Dettagli", th_style),
+                Paragraph("Ore", th_style)
+            ]]
+            
             for _, row in df_report.iterrows():
                 parsed_dt = parse_data_italiana(row.get("Data", ""))
                 data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                
                 det_data.append([
-                    data_str,
-                    f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
-                    str(row.get("Classe", "")),
-                    str(row.get("Sede", "")),
-                    str(row.get("Modalità", "")),
-                    f"{row.get('Ore', 0):.2f}h"
+                    Paragraph(data_str, td_style),
+                    Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", td_style),
+                    Paragraph(str(row.get("Classe", "")), td_style),
+                    Paragraph(str(row.get("Sede", "")), td_style),
+                    Paragraph(str(row.get("Modalità", "")), td_style),
+                    Paragraph(str(row.get("Note", "")), td_style),
+                    Paragraph(f"{row.get('Ore', 0):.2f}h", td_style)
                 ])
             
-            t_det = Table(det_data, colWidths=[65, 80, 115, 95, 80, 40])
+            # Distribuzione larghezze ottimizzata per il foglio orizzontale (totale ~802pt)
+            t_det = Table(det_data, colWidths=[65, 80, 140, 110, 80, 275, 52])
             t_det.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,-1), 9),
-                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
                 ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
                 ('LINEBELOW', (0,1), (-1,-1), 0.5, colors.HexColor('#eeeeee')),
             ]))
             elements.append(t_det)
             
-            # Totale generale in fondo
-            elements.append(Spacer(1, 10))
+            # --- TOTALE GENERALE ---
+            elements.append(Spacer(1, 8))
             totale_generale = df_report["Ore"].sum()
-            t_tot = Table([[f"TOTALE GENERALE ORE: {totale_generale:.2f} h"]], colWidths=[535])
+            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73')))]], colWidths=[802])
             t_tot.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
-                ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#1c3d73')),
                 ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-                ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,-1), 10),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-                ('TOPPADDING', (0,0), (-1,-1), 6),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+                ('TOPPADDING', (0,0), (-1,-1), 5),
             ]))
             elements.append(t_tot)
         
