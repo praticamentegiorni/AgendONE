@@ -74,6 +74,97 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
+# Funzione per generare il Report in formato PDF professionale con parziali per classe
+def genera_pdf_report(df_report):
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1c3d73'), spaceAfter=10)
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#333333'), spaceAfter=6)
+        
+        elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
+        elements.append(Spacer(1, 10))
+        
+        # Tabella dei totali parziali raggruppati per Classe / Committente
+        elements.append(Paragraph("Riepilogo Parziali per Classe / Committente", subtitle_style))
+        if not df_report.empty and "Classe" in df_report.columns and "Ore" in df_report.columns:
+            df_summary = df_report.groupby("Classe")["Ore"].sum().reset_index()
+            summary_data = [["Classe / Committente", "Ore Totali Parziali"]]
+            for _, row in df_summary.iterrows():
+                summary_data.append([str(row["Classe"]), f"{row['Ore']:.2f} h"])
+            
+            t_summary = Table(summary_data, colWidths=[350, 185])
+            t_summary.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c3d73')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 10),
+                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f9f9f9')),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+            ]))
+            elements.append(t_summary)
+        
+        elements.append(Spacer(1, 15))
+        elements.append(Paragraph("Elenco Dettagliato Attività", subtitle_style))
+        
+        if not df_report.empty:
+            det_data = [["Data", "Orario", "Classe", "Sede", "Modalità", "Ore"]]
+            for _, row in df_report.iterrows():
+                parsed_dt = parse_data_italiana(row.get("Data", ""))
+                data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                det_data.append([
+                    data_str,
+                    f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
+                    str(row.get("Classe", "")),
+                    str(row.get("Sede", "")),
+                    str(row.get("Modalità", "")),
+                    f"{row.get('Ore', 0):.2f}h"
+                ])
+            
+            t_det = Table(det_data, colWidths=[65, 80, 115, 95, 80, 40])
+            t_det.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
+                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+                ('LINEBELOW', (0,1), (-1,-1), 0.5, colors.HexColor('#eeeeee')),
+            ]))
+            elements.append(t_det)
+            
+            # Totale generale in fondo
+            elements.append(Spacer(1, 10))
+            totale_generale = df_report["Ore"].sum()
+            t_tot = Table([[f"TOTALE GENERALE ORE: {totale_generale:.2f} h"]], colWidths=[535])
+            t_tot.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
+                ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#1c3d73')),
+                ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+                ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 10),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+            ]))
+            elements.append(t_tot)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        return None
+
 # Funzione per ottenere il client gspread dai secrets di Streamlit
 def get_gspread_client_and_sheet():
     try:
@@ -358,7 +449,7 @@ with tab1:
                 st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
             else:
                 val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                val_sede = nuova_sede_libera.strip() if nueva_sede_libera else sede # type: ignore
+                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
                 val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
                 if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
@@ -491,7 +582,6 @@ with tab3:
             }
         )
 
-        # Totale ore calcolato direttamente sulla vista corrente (filtrata o completa) dell'archivio
         ore_totali_archivio = df_mostra["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"📊 **Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
 
@@ -719,7 +809,6 @@ with tab3:
 
         ore_totali = df_report["Ore"].sum()
 
-        # Totale ore in evidenza sotto i filtri del report
         st.success(f"📈 **Risultati Report Filtrati:** {len(df_report)} attività trovate | ⏱️ **Totale Ore Report:** **{ore_totali:.2f} ore**")
 
         if not df_report.empty:
@@ -766,9 +855,9 @@ with tab3:
                     unsafe_allow_html=True
                 )
 
-        # Pulsanti di Esportazione e Sincronizzazione Massiva
+        # Pulsanti di Esportazione (CSV, Excel, PDF) e Sincronizzazione Massiva
         st.markdown("---")
-        c_exp1, c_exp2, c_exp3 = st.columns(3)
+        c_exp1, c_exp2, c_exp3, c_exp4 = st.columns(4)
 
         with c_exp1:
             df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
@@ -804,6 +893,19 @@ with tab3:
             )
 
         with c_exp3:
+            pdf_data = genera_pdf_report(df_report)
+            if pdf_data:
+                st.download_button(
+                    label="📄 Scarica Report PDF",
+                    data=pdf_data,
+                    file_name="report_attivita.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.button("📄 PDF non disponibile", disabled=True, use_container_width=True, help="Installa reportlab per abilitare l'esportazione PDF")
+
+        with c_exp4:
             if st.button("🔄 Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
                 count_sinc = 0
                 for idx, row in df.iterrows():
