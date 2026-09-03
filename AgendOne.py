@@ -493,42 +493,93 @@ with tab1:
                 st.success("Attività salvata e sincronizzata con Google Calendar!")
                 st.rerun()
 
-# ================= TAB 2: GESTIONE TABELLE =================
+# ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
-    st.subheader("Amministrazione Voci e Tabelle")
-    def gestisci_tabella_avanzata(nome_tabella, lista_voci):
-        st.markdown(f"### {nome_tabella.capitalize()}")
-        nuovo = st.text_input(f"Nuovo {nome_tabella[:-1]}", key=f"add_{nome_tabella}")
-        if st.button(f"Aggiungi", key=f"btn_add_{nome_tabella}"):
-            if nuovo and nuovo not in lista_voci:
-                lista_voci.append(nuovo)
-                salva_config(config)
-                st.success(f"Aggiunto: {nuovo}")
-                st.rerun()
-        st.markdown("---")
-        for i, voce in enumerate(list(lista_voci)):
-            c_mod, c_del = st.columns([3, 1])
-            voce_modificata = c_mod.text_input(f"Modifica {i}", value=voce, key=f"edit_{nome_tabella}_{i}")
-            if c_del.button("🗑️", key=f"del_{nome_tabella}_{i}"):
-                lista_voci.remove(voce)
-                salva_config(config)
-                st.success("Voce eliminata!")
-                st.rerun()
-            if voce_modificata != voce and voce_modificata:
-                if voce_modificata not in lista_voci:
-                    lista_voci[i] = voce_modificata
+    st.subheader("⚙️ Gestione Avanzata Voci (Classi, Sedi e Modalità)")
+    st.markdown("Gestisci gli elenchi a tendina per l'inserimento rapido delle attività. Il sistema impedisce automaticamente l'inserimento di voci duplicate.")
+
+    def gestisci_sezione_combo(titolo_sezione, chiave_config, icona):
+        st.markdown(f"### {icona} {titolo_sezione}")
+        lista_corrente = config[chiave_config]
+
+        # 1. Selezione per modifica o eliminazione rapida
+        col_sel, col_del = st.columns([3, 1])
+        with col_sel:
+            voce_selezionata = st.selectbox(
+                f"Voci esistenti in {titolo_sezione}",
+                options=["-- Seleziona per modificare/eliminare --"] + sorted(lista_corrente),
+                key=f"sel_mod_{chiave_config}"
+            )
+        
+        # 2. Aggiunta nuova voce con controllo duplicati
+        with st.form(key=f"form_add_{chiave_config}", clear_on_submit=True):
+            c_in1, c_in2 = st.columns([3, 1])
+            with c_in1:
+                nuova_voce = st.text_input(f"Aggiungi nuovo elemento a {titolo_sezione}", placeholder=esci_placeholder(titolo_sezione), label_visibility="collapsed")
+            with c_in2:
+                btn_aggiungi = st.form_submit_button("➕ Aggiungi", use_container_width=True)
+            
+            if btn_aggiungi:
+                nuova_pulita = nuova_voce.strip()
+                if not nuova_pulita:
+                    st.warning("Il campo non può essere vuoto.")
+                elif any(v.lower() == nuova_pulita.lower() for v in lista_corrente):
+                    st.error(restituisci_messaggio_duplicato(titolo_sezione, nuova_pulita))
+                else:
+                    lista_corrente.append(nuova_pulita)
                     salva_config(config)
-                    st.success("Voce aggiornata!")
+                    st.success(f"Elemento '{nuova_pulita}' aggiunto con successo!")
                     st.rerun()
 
-    col_g1, col_g2, col_g3 = st.columns(3)
-    with col_g1:
-        gestisci_tabella_avanzata("classi", config["classi"])
-    with col_g2:
-        gestisci_tabella_avanzata("sedi", config["sedi"])
-    with col_g3:
-        gestisci_tabella_avanzata("modalita", config["modalita"])
+        # 3. Modifica o eliminazione della voce selezionata
+        if voce_selezionata != "-- Seleziona per modificare/eliminare --":
+            st.markdown(f"**Modifica o rimuovi:** `{voce_selezionata}`")
+            with st.form(key=f"form_edit_{chiave_config}"):
+                c_ed1, c_ed2, c_ed3 = st.columns([3, 1, 1])
+                with c_ed1:
+                    valore_modificato = st.text_input("Rinomina voce", value=voce_selezionata, label_visibility="collapsed")
+                with c_ed2:
+                    btn_salva_mod = st.form_submit_button("💾 Salva", use_container_width=True)
+                with c_ed3:
+                    btn_elimina = st.form_submit_button("🗑️ Elimina", use_container_width=True, type="primary")
 
+                if btn_salva_mod:
+                    valore_pulito = valore_modificato.strip()
+                    if not valore_pulito:
+                        st.warning("Il nome non può essere vuoto.")
+                    elif valore_pulito.lower() != voce_selezionata.lower() and any(v.lower() == valore_pulito.lower() for v in lista_corrente):
+                        st.error("Esiste già una voce con questo nome.")
+                    else:
+                        idx = lista_corrente.index(voce_selezionata)
+                        lista_corrente[idx] = valore_pulito
+                        salva_config(config)
+                        st.success("Voce aggiornata con successo!")
+                        st.rerun()
+
+                if btn_elimina:
+                    if voce_selezionata in lista_corrente:
+                        lista_corrente.remove(voce_selezionata)
+                        salva_config(config)
+                        st.success(f"Voce '{voce_selezionata}' eliminata!")
+                        st.rerun()
+
+    # Funzioni di supporto per i testi dinamici
+    def esci_placeholder(t):
+        if "Classi" in t: return "Es. Classe 4A..."
+        if "Sedi" in t: return "Es. Aula Magna..."
+        return "Es. Presenza / Online..."
+
+    def restituisci_messaggio_duplicato(t, nome):
+        return f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
+
+    # Layout a 3 colonne esteticamente curate per le sezioni
+    col1, col2, col3 = st.columns(3, gap="medium")
+    with col1:
+        gestisci_sezione_combo("Classi", "classi", "🏫")
+    with col2:
+        gestisci_sezione_combo("Sedi", "sedi", "📍")
+    with col3:
+        gestisci_sezione_combo("Modalità", "modalita", "💻")
 # ================= TAB 3: ARCHIVIO, MODIFICA, REPORT & RIEPILOGO =================
 with tab3:
     st.subheader("Storico, Modifica e Gestione Appuntamenti")
