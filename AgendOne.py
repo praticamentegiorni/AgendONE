@@ -10,6 +10,24 @@ st.set_page_config(
     page_title="Gestione Orari e Classi", page_icon="", layout="wide"
 )
 
+# Blocco CSS per rendere i tab in alto fissi (sticky) durante lo scorrimento della pagina
+st.markdown(
+    """
+    <style>
+        /* Rende fisso il contenitore dei tab nella parte superiore dello schermo */
+        div[data-testid="stTabs"] {
+            position: sticky;
+            top: 3.5rem;
+            z-index: 999;
+            background-color: var(--background-color);
+            padding-top: 10px;
+            padding-bottom: 5px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # File di configurazione locale delle tabelle
 CONFIG_FILE = "config_tabelle.json"
 
@@ -806,7 +824,7 @@ with tab3:
                         }
 
                         cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                        if cal_id_esistente and cal_id_esistenne.lower() not in ["nan", "none", ""]: # type: ignore
                             res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
                             df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
                         else:
