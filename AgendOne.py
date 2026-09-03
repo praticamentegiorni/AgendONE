@@ -358,7 +358,7 @@ with tab1:
                 st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
             else:
                 val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
+                val_sede = nuova_sede_libera.strip() if nueva_sede_libera else sede # type: ignore
                 val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
                 if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
@@ -490,6 +490,10 @@ with tab3:
                 "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
             }
         )
+
+        # Totale ore calcolato direttamente sulla vista corrente (filtrata o completa) dell'archivio
+        ore_totali_archivio = df_mostra["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
+        st.info(f"📊 **Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
@@ -715,7 +719,8 @@ with tab3:
 
         ore_totali = df_report["Ore"].sum()
 
-        st.markdown(f"Risultati filtrati: **{len(df_report)}** attività | Ore totali: **{ore_totali:.2f} ore**")
+        # Totale ore in evidenza sotto i filtri del report
+        st.success(f"📈 **Risultati Report Filtrati:** {len(df_report)} attività trovate | ⏱️ **Totale Ore Report:** **{ore_totali:.2f} ore**")
 
         if not df_report.empty:
             st.markdown("---")
