@@ -10,14 +10,14 @@ st.set_page_config(
     page_title="Gestione Orari e Classi", page_icon="", layout="wide"
 )
 
-# Blocco CSS per rendere i tab in alto fissi (sticky) durante lo scorrimento della pagina
+# --- CSS PERSONALIZZATO PER FISSARE I MENU IN ALTO ---
 st.markdown(
     """
     <style>
-        /* Rende fisso il contenitore dei tab nella parte superiore dello schermo */
+        /* Fissa i tab di navigazione principali in alto durante lo scroll */
         div[data-testid="stTabs"] {
             position: sticky;
-            top: 3.5rem;
+            top: 40px; /* Regola questa distanza in base alla barra superiore di Streamlit */
             z-index: 999;
             background-color: var(--background-color);
             padding-top: 10px;
