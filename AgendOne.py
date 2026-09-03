@@ -7,7 +7,7 @@ import streamlit as st
 
 # Configurazione della pagina
 st.set_page_config(
-    page_title="Gestione Orari e Classi", page_icon="🕒", layout="wide"
+    page_title="Gestione Orari e Classi", page_icon="", layout="wide"
 )
 
 # File di configurazione locale delle tabelle
@@ -75,7 +75,6 @@ def calcola_ore(ora_inizio, ora_fine):
     return max(0.0, round(diff, 2))
 
 # Funzione per generare il Report in formato PDF professionale con parziali per classe
-# Funzione per generare il Report in formato PDF professionale con colonne adattive e a capo automatico
 def genera_pdf_report(df_report):
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -407,13 +406,13 @@ def salva_dati(df_to_save):
 
 df = carica_dati()
 
-st.title("🕒 Gestione Orari e Classi")
+st.title("Gestione Orari e Classi")
 st.markdown("---")
 
 tab1, tab2, tab3 = st.tabs([
-    "📝 Inserisci Attività",
-    "⚙️ Gestione Tabelle & Combo",
-    "📊 Archivio, Modifica, Report & Riepilogo",
+    "Inserisci Attività",
+    "Gestione Tabelle & Combo",
+    "Archivio, Modifica, Report & Riepilogo",
 ])
 
 opzioni_promemoria = {
@@ -451,7 +450,7 @@ with tab1:
         orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
         ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
 
-        st.caption(f"⏱️ Durata stimata: **{ore_calcolate} ore**")
+        st.caption(f"Durata stimata: **{ore_calcolate} ore**")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -464,13 +463,13 @@ with tab1:
             modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        scelta_prom_label = st.selectbox("⏰ Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=4, disabled=True)
+        scelta_prom_label = st.selectbox("Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=4, disabled=True)
         minuti_scelti = opzioni_promemoria[scelta_prom_label]
 
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
 
-        submit_button = st.form_submit_button(label="💾 Salva Attività", use_container_width=True)
+        submit_button = st.form_submit_button(label="Salva Attività", use_container_width=True)
 
         if submit_button:
             if orario_inizio_str >= orario_fine_str:
@@ -523,11 +522,11 @@ with tab1:
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
-    st.subheader("⚙️ Gestione Avanzata Voci (Classi, Sedi e Modalità)")
+    st.subheader("Gestione Avanzata Voci (Classi, Sedi e Modalità)")
     st.markdown("Gestisci gli elenchi a tendina per l'inserimento rapido delle attività. Il sistema impedisce automaticamente l'inserimento di voci duplicate.")
 
-    def gestisci_sezione_combo(titolo_sezione, chiave_config, icona):
-        st.markdown(f"### {icona} {titolo_sezione}")
+    def gestisci_sezione_combo(titolo_sezione, chiave_config):
+        st.markdown(f"### {titolo_sezione}")
         lista_corrente = config[chiave_config]
 
         # 1. Selezione per modifica o eliminazione rapida
@@ -545,7 +544,7 @@ with tab2:
             with c_in1:
                 nuova_voce = st.text_input(f"Aggiungi nuovo elemento a {titolo_sezione}", placeholder=esci_placeholder(titolo_sezione), label_visibility="collapsed")
             with c_in2:
-                btn_aggiungi = st.form_submit_button("➕ Aggiungi", use_container_width=True)
+                btn_aggiungi = st.form_submit_button("Aggiungi", use_container_width=True)
             
             if btn_aggiungi:
                 nuova_pulita = nuova_voce.strip()
@@ -567,9 +566,9 @@ with tab2:
                 with c_ed1:
                     valore_modificato = st.text_input("Rinomina voce", value=voce_selezionata, label_visibility="collapsed")
                 with c_ed2:
-                    btn_salva_mod = st.form_submit_button("💾 Salva", use_container_width=True)
+                    btn_salva_mod = st.form_submit_button("Salva", use_container_width=True)
                 with c_ed3:
-                    btn_elimina = st.form_submit_button("🗑️ Elimina", use_container_width=True, type="primary")
+                    btn_elimina = st.form_submit_button("Elimina", use_container_width=True, type="primary")
 
                 if btn_salva_mod:
                     valore_pulito = valore_modificato.strip()
@@ -603,11 +602,12 @@ with tab2:
     # Layout a 3 colonne esteticamente curate per le sezioni
     col1, col2, col3 = st.columns(3, gap="medium")
     with col1:
-        gestisci_sezione_combo("Classi", "classi", "🏫")
+        gestisci_sezione_combo("Classi", "classi")
     with col2:
-        gestisci_sezione_combo("Sedi", "sedi", "📍")
+        gestisci_sezione_combo("Sedi", "sedi")
     with col3:
-        gestisci_sezione_combo("Modalità", "modalita", "💻")
+        gestisci_sezione_combo("Modalità", "modalita")
+
 # ================= TAB 3: ARCHIVIO, MODIFICA, REPORT & RIEPILOGO =================
 with tab3:
     st.subheader("Storico, Modifica e Gestione Appuntamenti")
@@ -627,7 +627,7 @@ with tab3:
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
             df_vis = df_vis[cols + ["ID_originale"]]
 
-        filtro = st.text_input("🔍 Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
+        filtro = st.text_input("Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
         df_mostra = df_vis.copy()
         if filtro:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
@@ -662,7 +662,7 @@ with tab3:
         )
 
         ore_totali_archivio = df_mostra["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
-        st.info(f"📊 **Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
+        st.info(f"**Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
@@ -679,7 +679,7 @@ with tab3:
 
         col_act1, col_act2 = st.columns(2)
         with col_act1:
-            if st.button("🗑️ Elimina Selezionati", type="primary", use_container_width=True):
+            if st.button("Elimina Selezionati", type="primary", use_container_width=True):
                 if righe_selezionate:
                     for r_idx in righe_selezionate:
                         cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
@@ -692,7 +692,7 @@ with tab3:
                 else:
                     st.warning("Seleziona almeno un appuntamento da eliminare.")
         with col_act2:
-            if st.button("📋 Duplica Selezionato", use_container_width=True):
+            if st.button("Duplica Selezionato", use_container_width=True):
                 if len(righe_selezionate) == 1:
                     riga_idx = righe_selezionate[0]
                     nuova_riga = df.loc[riga_idx].copy()
@@ -729,7 +729,7 @@ with tab3:
             riga_idx = righe_selezionate[0]
             riga_corrente = df.loc[riga_idx]
 
-            st.markdown(f"### ✏️ Modifica Appuntamento (Riga ID {riga_idx})")
+            st.markdown(f"### Modifica Appuntamento (Riga ID {riga_idx})")
             with st.form("form_modifica_multipla"):
                 try:
                     data_default = datetime.datetime.strptime(str(riga_corrente["Data"]), "%Y-%m-%d").date()
@@ -770,7 +770,7 @@ with tab3:
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 indice_default_rem = list(opzioni_promemoria.values()).index(attuale_minuti) if attuale_minuti in opzioni_promemoria.values() else 4
-                scelta_prom_mod_label = st.selectbox("⏰ Modifica Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria", disabled=True)
+                scelta_prom_mod_label = st.selectbox("Modifica Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria", disabled=True)
                 minuti_scelti_mod = opzioni_promemoria[scelta_prom_mod_label]
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
@@ -778,7 +778,7 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
 
-                if st.form_submit_button("💾 Salva Modifiche", use_container_width=True):
+                if st.form_submit_button("Salva Modifiche", use_container_width=True):
                     if mod_orario_i_str >= mod_orario_f_str:
                         st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                     else:
@@ -819,11 +819,11 @@ with tab3:
 
         # ================= REPORT =================
         st.markdown("---")
-        st.subheader("📈 Generazione Report, Ricerca & Ordinamento")
+        st.subheader("Generazione Report, Ricerca & Ordinamento")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
-            ricerca_libera = st.text_input("🔍 Ricerca libera", placeholder="Parole chiave...")
+            ricerca_libera = st.text_input("Ricerca libera", placeholder="Parole chiave...")
         with col_t2:
             data_inizio_filtro = st.date_input("Data Inizio", value=None, format="DD/MM/YYYY")
         with col_t3:
@@ -840,7 +840,7 @@ with tab3:
             modalita_disponibili = ["Tutti"] + sorted(df["Modalità"].dropna().unique().tolist())
             filtro_modalita = st.selectbox("Filtra per Modalità", options=modalita_disponibili)
 
-        st.markdown("##### 🔃 Opzioni di Ordinamento Report")
+        st.markdown("##### Opzioni di Ordinamento Report")
         col_ord1, col_ord2 = st.columns(2)
         with col_ord1:
             campi_ordinamento = {
@@ -888,11 +888,11 @@ with tab3:
 
         ore_totali = df_report["Ore"].sum()
 
-        st.success(f"📈 **Risultati Report Filtrati:** {len(df_report)} attività trovate | ⏱️ **Totale Ore Report:** **{ore_totali:.2f} ore**")
+        st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività trovate | **Totale Ore Report:** **{ore_totali:.2f} ore**")
 
         if not df_report.empty:
             st.markdown("---")
-            st.markdown("### 📋 Elenco Attività in Evidenza")
+            st.markdown("### Elenco Attività in Evidenza")
 
             for _, row in df_report.iterrows():
                 parsed_dt = parse_data_italiana(row["Data"])
@@ -926,9 +926,9 @@ with tab3:
                 st.markdown(
                     f"""
                     <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
-                        <strong>📅 {data_formattata}</strong> | ⏰ {orario_i} - {orario_f} ({ore_val:.2f}h)<br>
-                        <strong>🏫 Classe/Committente:</strong> {classe} | <strong>📍 Sede:</strong> {sede} | <strong>💻 Modalità:</strong> {modalita}<br>
-                        <em>📝 Note:</em> {note if note else 'Nessuna nota'}
+                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h)<br>
+                        <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
+                        <em>Note:</em> {note if note else 'Nessuna nota'}
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -942,7 +942,7 @@ with tab3:
             df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
             csv_data = df_export.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Scarica Report CSV",
+                label="Scarica Report CSV",
                 data=csv_data,
                 file_name="report_attivita.csv",
                 mime="text/csv",
@@ -964,7 +964,7 @@ with tab3:
                     
             buffer_excel.seek(0)
             st.download_button(
-                label="📥 Scarica Report Excel",
+                label="Scarica Report Excel",
                 data=buffer_excel,
                 file_name="report_attivita.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -975,17 +975,17 @@ with tab3:
             pdf_data = genera_pdf_report(df_report)
             if pdf_data:
                 st.download_button(
-                    label="📄 Scarica Report PDF",
+                    label="Scarica Report PDF",
                     data=pdf_data,
                     file_name="report_attivita.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
             else:
-                st.button("📄 PDF non disponibile", disabled=True, use_container_width=True, help="Installa reportlab per abilitare l'esportazione PDF")
+                st.button("PDF non disponibile", disabled=True, use_container_width=True, help="Installa reportlab per abilitare l'esportazione PDF")
 
         with c_exp4:
-            if st.button("🔄 Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
+            if st.button("Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
                 count_sinc = 0
                 for idx, row in df.iterrows():
                     cal_id = str(row.get("Calendar_ID", ""))
