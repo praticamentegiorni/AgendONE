@@ -10,31 +10,6 @@ st.set_page_config(
     page_title="Gestione Orari e Classi", page_icon="", layout="wide"
 )
 
-# --- CSS PERSONALIZZATO PER FISSARE I MENU IN ALTO ---
-st.markdown(
-    """
-    <style>
-        /* Fissa la barra dei tab in cima allo schermo */
-        div[data-testid="stTabs"] {
-            position: fixed;
-            top: 3.8rem; /* Altezza appena sotto la barra superiore di Streamlit */
-            left: 0;
-            right: 0;
-            z-index: 99999;
-            background-color: var(--background-color);
-            padding: 10px 2rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Aggiunge margine in alto al contenitore principale per evitare che il contenuto finisca sotto i tab fissi */
-        .main .block-container {
-            padding-top: 7rem;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # File di configurazione locale delle tabelle
 CONFIG_FILE = "config_tabelle.json"
 
@@ -831,7 +806,7 @@ with tab3:
                         }
 
                         cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                        if cal_id_esistente and cal_id_esistenne.lower() not in ["nan", "none", ""]: # type: ignore
+                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
                             res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
                             df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
                         else:
