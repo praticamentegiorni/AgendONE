@@ -7,7 +7,7 @@ import streamlit as st
 
 # Configurazione della pagina
 st.set_page_config(
-    page_title="Gestione Orari e Classi", page_icon="", layout="wide"
+    page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
 )
 
 # File di configurazione locale delle tabelle
@@ -74,7 +74,7 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
-# Funzione per generare il Report in formato PDF professionale con parziali per classe
+# Funzione per generare il Report in formato PDF professionale con parziali per ente e classe
 def genera_pdf_report(df_report):
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -82,7 +82,6 @@ def genera_pdf_report(df_report):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
         
-        # Utilizziamo il formato A4 Orizzontale (Landscape) per massimizzare lo spazio orizzontale
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
             buffer, 
@@ -98,7 +97,6 @@ def genera_pdf_report(df_report):
         title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor('#1c3d73'), spaceAfter=6)
         subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=4)
         
-        # Stili per le celle delle tabelle per gestire il testo a capo
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
@@ -106,6 +104,31 @@ def genera_pdf_report(df_report):
         elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
         elements.append(Spacer(1, 6))
         
+        # --- TABELLA RIEPILOGO PARZIALI PER ENTE ---
+        elements.append(Paragraph("Riepilogo Parziali per Ente di Appartenenza", subtitle_style))
+        if not df_report.empty and "Ente" in df_report.columns and "Ore" in df_report.columns:
+            df_summary_ente = df_report.groupby("Ente")["Ore"].sum().reset_index()
+            summary_ente_data = [[Paragraph("Ente di Appartenenza", th_style), Paragraph("Ore Totali Parziali", th_style)]]
+            
+            for _, row in df_summary_ente.iterrows():
+                summary_ente_data.append([
+                    Paragraph(str(row["Ente"]), td_summary_style),
+                    Paragraph(f"{row['Ore']:.2f} h", td_summary_style)
+                ])
+            
+            t_summary_ente = Table(summary_ente_data, colWidths=[600, 180])
+            t_summary_ente.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c3d73')),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f9f9f9')),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+            ]))
+            elements.append(t_summary_ente)
+            elements.append(Spacer(1, 8))
+
         # --- TABELLA RIEPILOGO PARZIALI PER CLASSE ---
         elements.append(Paragraph("Riepilogo Parziali per Classe / Committente", subtitle_style))
         if not df_report.empty and "Classe" in df_report.columns and "Ore" in df_report.columns:
@@ -118,7 +141,6 @@ def genera_pdf_report(df_report):
                     Paragraph(f"{row['Ore']:.2f} h", td_summary_style)
                 ])
             
-            # Larghezze ottimizzate per A4 orizzontale (Totale ~800pt)
             t_summary = Table(summary_data, colWidths=[600, 180])
             t_summary.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c3d73')),
@@ -139,6 +161,7 @@ def genera_pdf_report(df_report):
             det_data = [[
                 Paragraph("Data", th_style),
                 Paragraph("Orario", th_style),
+                Paragraph("Ente", th_style),
                 Paragraph("Classe / Committente", th_style),
                 Paragraph("Sede", th_style),
                 Paragraph("Modalità", th_style),
@@ -153,6 +176,7 @@ def genera_pdf_report(df_report):
                 det_data.append([
                     Paragraph(data_str, td_style),
                     Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", td_style),
+                    Paragraph(str(row.get("Ente", "")), td_style),
                     Paragraph(str(row.get("Classe", "")), td_style),
                     Paragraph(str(row.get("Sede", "")), td_style),
                     Paragraph(str(row.get("Modalità", "")), td_style),
@@ -160,8 +184,7 @@ def genera_pdf_report(df_report):
                     Paragraph(f"{row.get('Ore', 0):.2f}h", td_style)
                 ])
             
-            # Distribuzione larghezze ottimizzata per il foglio orizzontale (totale ~802pt)
-            t_det = Table(det_data, colWidths=[65, 80, 140, 110, 80, 275, 52])
+            t_det = Table(det_data, colWidths=[60, 75, 110, 110, 90, 75, 230, 52])
             t_det.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
@@ -173,7 +196,6 @@ def genera_pdf_report(df_report):
             ]))
             elements.append(t_det)
             
-            # --- TOTALE GENERALE ---
             elements.append(Spacer(1, 8))
             totale_generale = df_report["Ore"].sum()
             t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73')))]], colWidths=[802])
@@ -253,14 +275,14 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                 evento_id_esistente = None
 
         if azione != "elimina":
-            data_str = dati_evento["Data"] # YYYY-MM-DD
+            data_str = dati_evento["Data"]
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
             body = {
-                'summary': f"Lezione/Impegno: {dati_evento['Classe']} ({dati_evento['Modalità']})",
+                'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
-                'description': f"Note: {dati_evento['Note']}\nGestito da AgendOne",
+                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento['Note']}\nGestito da AgendOne",
                 'start': {
                     'dateTime': start_datetime,
                     'timeZone': 'Europe/Rome',
@@ -304,6 +326,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
 # Gestione configurazione tabelle
 def carica_config():
     default_config = {
+        "enti": ["Scuola Radio Elettra", "Scuola Bufalini", "Commercialista", "Personale"],
         "classi": ["Classe 1A", "Classe 2B", "Classe 3C"],
         "sedi": ["Sede Centrale", "Succursale", "Smart Working"],
         "modalita": ["Presenza", "Videolezione"],
@@ -332,7 +355,7 @@ config = carica_config()
 
 # Caricamento dati da Google Sheets
 def carica_dati():
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -387,7 +410,7 @@ def carica_dati():
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
     for c in cols_standard:
         if c not in df_to_save.columns:
             df_to_save[c] = ""
@@ -406,7 +429,7 @@ def salva_dati(df_to_save):
 
 df = carica_dati()
 
-st.title("Gestione Orari e Classi")
+st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
 tab1, tab2, tab3 = st.tabs([
@@ -452,7 +475,10 @@ with tab1:
 
         st.caption(f"Durata stimata: **{ore_calcolate} ore**")
 
-        col_t1, col_t2, col_t3 = st.columns(3)
+        col_t0, col_t1, col_t2, col_t3 = st.columns(4)
+        with col_t0:
+            ente = st.selectbox("Ente", options=config["enti"], index=0 if config["enti"] else None, key="sel_ente")
+            nuovo_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="lib_ente")
         with col_t1:
             classe = st.selectbox("Classe", options=config["classi"], index=0 if config["classi"] else None, key="sel_classe")
             nuova_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="lib_classe")
@@ -463,7 +489,7 @@ with tab1:
             modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        scelta_prom_label = st.selectbox("Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=4, disabled=True)
+        scelta_prom_label = st.selectbox("Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=4)
         minuti_scelti = opzioni_promemoria[scelta_prom_label]
 
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
@@ -475,10 +501,13 @@ with tab1:
             if orario_inizio_str >= orario_fine_str:
                 st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
             else:
+                val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
                 val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
                 val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
                 val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
+                if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
+                    config["enti"].append(nuovo_ente_libero)
                 if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
                     config["classi"].append(nuova_classe_libera)
                 if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
@@ -491,6 +520,7 @@ with tab1:
                     "Data": data_selezionata.strftime("%Y-%m-%d"),
                     "Orario Inizio": orario_inizio_str,
                     "Orario Fine": orario_fine_str,
+                    "Ente": val_ente,
                     "Classe": val_classe,
                     "Sede": val_sede,
                     "Modalità": val_modalita,
@@ -506,6 +536,7 @@ with tab1:
                     "Orario Inizio": [orario_inizio_str],
                     "Orario Fine": [orario_fine_str],
                     "Ore": [ore_calcolate],
+                    "Ente": [val_ente],
                     "Classe": [val_classe],
                     "Sede": [val_sede],
                     "Modalità": [val_modalita],
@@ -522,14 +553,13 @@ with tab1:
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
-    st.subheader("Gestione Avanzata Voci (Classi, Sedi e Modalità)")
+    st.subheader("Gestione Avanzata Voci (Enti, Classi, Sedi e Modalità)")
     st.markdown("Gestisci gli elenchi a tendina per l'inserimento rapido delle attività. Il sistema impedisce automaticamente l'inserimento di voci duplicate.")
 
     def gestisci_sezione_combo(titolo_sezione, chiave_config):
         st.markdown(f"### {titolo_sezione}")
         lista_corrente = config[chiave_config]
 
-        # 1. Selezione per modifica o eliminazione rapida
         col_sel, col_del = st.columns([3, 1])
         with col_sel:
             voce_selezionata = st.selectbox(
@@ -538,7 +568,6 @@ with tab2:
                 key=f"sel_mod_{chiave_config}"
             )
         
-        # 2. Aggiunta nuova voce con controllo duplicati
         with st.form(key=f"form_add_{chiave_config}", clear_on_submit=True):
             c_in1, c_in2 = st.columns([3, 1])
             with c_in1:
@@ -558,7 +587,6 @@ with tab2:
                     st.success(f"Elemento '{nuova_pulita}' aggiunto con successo!")
                     st.rerun()
 
-        # 3. Modifica o eliminazione della voce selezionata
         if voce_selezionata != "-- Seleziona per modificare/eliminare --":
             st.markdown(f"**Modifica o rimuovi:** `{voce_selezionata}`")
             with st.form(key=f"form_edit_{chiave_config}"):
@@ -590,22 +618,23 @@ with tab2:
                         st.success(f"Voce '{voce_selezionata}' eliminata!")
                         st.rerun()
 
-    # Funzioni di supporto per i testi dinamici
     def esci_placeholder(t):
+        if "Enti" in t: return "Es. Scuola Bufalini..."
         if "Classi" in t: return "Es. Classe 4A..."
         if "Sedi" in t: return "Es. Aula Magna..."
         return "Es. Presenza / Online..."
 
     def restituisci_messaggio_duplicato(t, nome):
-        return f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
+        return f"Attenzione: '{nome}' è già presente nell'elenco degli {t.lower()}." if t == "Enti" else f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
 
-    # Layout a 3 colonne esteticamente curate per le sezioni
-    col1, col2, col3 = st.columns(3, gap="medium")
+    col1, col2, col3, col4 = st.columns(4, gap="medium")
     with col1:
-        gestisci_sezione_combo("Classi", "classi")
+        gestisci_sezione_combo("Enti", "enti")
     with col2:
-        gestisci_sezione_combo("Sedi", "sedi")
+        gestisci_sezione_combo("Classi", "classi")
     with col3:
+        gestisci_sezione_combo("Sedi", "sedi")
+    with col4:
         gestisci_sezione_combo("Modalità", "modalita")
 
 # ================= TAB 3: ARCHIVIO, MODIFICA, REPORT & RIEPILOGO =================
@@ -705,6 +734,7 @@ with tab3:
                         "Data": str(nuova_riga["Data"]),
                         "Orario Inizio": str(nuova_riga["Orario Inizio"]),
                         "Orario Fine": str(nuova_riga["Orario Fine"]),
+                        "Ente": str(nuova_riga.get("Ente", "")),
                         "Classe": str(nuova_riga["Classe"]),
                         "Sede": str(nuova_riga["Sede"]),
                         "Modalità": str(nuova_riga["Modalità"]),
@@ -764,13 +794,14 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
+                mod_ente = st.text_input("Ente", value=str(riga_corrente.get("Ente", "")))
                 mod_classe = st.text_input("Classe", value=str(riga_corrente["Classe"]))
                 mod_sede = st.text_input("Sede", value=str(riga_corrente["Sede"]))
                 mod_modalita = st.text_input("Modalità", value=str(riga_corrente["Modalità"]))
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 indice_default_rem = list(opzioni_promemoria.values()).index(attuale_minuti) if attuale_minuti in opzioni_promemoria.values() else 4
-                scelta_prom_mod_label = st.selectbox("Modifica Avviso / Promemoria Calendar (Momentaneamente disabilitata)", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria", disabled=True)
+                scelta_prom_mod_label = st.selectbox("Modifica Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria")
                 minuti_scelti_mod = opzioni_promemoria[scelta_prom_mod_label]
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
@@ -787,6 +818,7 @@ with tab3:
                         df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
                         df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
                         df.loc[riga_idx, "Ore"] = mod_ore_calc
+                        df.loc[riga_idx, "Ente"] = mod_ente
                         df.loc[riga_idx, "Classe"] = mod_classe
                         df.loc[riga_idx, "Sede"] = mod_sede
                         df.loc[riga_idx, "Modalità"] = mod_modalita
@@ -798,6 +830,7 @@ with tab3:
                             "Data": mod_data.strftime("%Y-%m-%d"),
                             "Orario Inizio": mod_orario_i_str,
                             "Orario Fine": mod_orario_f_str,
+                            "Ente": mod_ente,
                             "Classe": mod_classe,
                             "Sede": mod_sede,
                             "Modalità": mod_modalita,
@@ -817,7 +850,6 @@ with tab3:
                         st.success("Modifiche salvate e calendario aggiornato!")
                         st.rerun()
 
-        # ================= REPORT =================
         st.markdown("---")
         st.subheader("Generazione Report, Ricerca & Ordinamento")
 
@@ -829,7 +861,10 @@ with tab3:
         with col_t3:
             data_fine_filtro = st.date_input("Data Fine", value=None, format="DD/MM/YYYY")
 
-        col_f1, col_f2, col_f3 = st.columns(3)
+        col_f0, col_f1, col_f2, col_f3 = st.columns(4)
+        with col_f0:
+            enti_disponibili = ["Tutti"] + sorted(df["Ente"].dropna().unique().tolist() if "Ente" in df.columns else [])
+            filtro_ente = st.selectbox("Filtra per Ente", options=enti_disponibili)
         with col_f1:
             classi_disponibili = ["Tutti"] + sorted(df["Classe"].dropna().unique().tolist())
             filtro_classe = st.selectbox("Filtra per Classe", options=classi_disponibili)
@@ -845,6 +880,7 @@ with tab3:
         with col_ord1:
             campi_ordinamento = {
                 "Data": "Data_dt",
+                "Ente": "Ente",
                 "Classe": "Classe",
                 "Sede": "Sede",
                 "Tipologia / Modalità": "Modalità"
@@ -864,6 +900,8 @@ with tab3:
         if data_fine_filtro:
             df_report = df_report[df_report["Data_dt"] <= pd.to_datetime(data_fine_filtro)]
 
+        if filtro_ente != "Tutti":
+            df_report = df_report[df_report["Ente"] == filtro_ente]
         if filtro_classe != "Tutti":
             df_report = df_report[df_report["Classe"] == filtro_classe]
         if filtro_sede != "Tutti":
@@ -897,6 +935,7 @@ with tab3:
             for _, row in df_report.iterrows():
                 parsed_dt = parse_data_italiana(row["Data"])
                 data_formattata = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row["Data"])
+                ente = str(row.get("Ente", ""))
                 classe = str(row["Classe"])
                 sede = str(row["Sede"])
                 modalita = str(row["Modalità"])
@@ -927,14 +966,13 @@ with tab3:
                     f"""
                     <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
                         <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h)<br>
-                        <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
+                        <strong>Ente:</strong> {ente if ente else 'N/D'} | <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
                         <em>Note:</em> {note if note else 'Nessuna nota'}
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
-        # Pulsanti di Esportazione (CSV, Excel, PDF) e Sincronizzazione Massiva
         st.markdown("---")
         c_exp1, c_exp2, c_exp3, c_exp4 = st.columns(4)
 
@@ -994,10 +1032,11 @@ with tab3:
                             "Data": str(row["Data"]),
                             "Orario Inizio": str(row["Orario Inizio"]),
                             "Orario Fine": str(row["Orario Fine"]),
-                            "Classe": str(row["Classe"]),
-                            "Sede": str(row["Sede"]),
-                            "Modalità": str(row["Modalità"]),
-                            "Note": str(row["Note"]),
+                            "Ente": str(row.get("Ente", "")),
+                            "Classe": str(row.get("Classe", "")),
+                            "Sede": str(row.get("Sede", "")),
+                            "Modalità": str(row.get("Modalità", "")),
+                            "Note": str(row.get("Note", "")),
                             "Reminder_Minuti": int(row.get("Reminder_Minuti", 240))
                         }
                         nuovo_id = sincronizza_google_calendar("crea", dati_evento)
