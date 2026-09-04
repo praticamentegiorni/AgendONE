@@ -355,7 +355,7 @@ config = carica_config()
 
 # Caricamento dati da Google Sheets
 def carica_dati():
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
     try:
         worksheet = get_gspread_client_and_sheet()
@@ -385,6 +385,11 @@ def carica_dati():
         else:
             df["Svolto"] = df["Svolto"].apply(lambda x: True if str(x).lower() in ["true", "1", "yes", "vero", "on"] else False)
 
+        if "Escludi_Conteggio" not in df.columns:
+            df["Escludi_Conteggio"] = False
+        else:
+            df["Escludi_Conteggio"] = df["Escludi_Conteggio"].apply(lambda x: True if str(x).lower() in ["true", "1", "yes", "vero", "on"] else False)
+
         if "Calendar_ID" not in df.columns:
             df["Calendar_ID"] = ""
         else:
@@ -410,7 +415,7 @@ def carica_dati():
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Note", "Calendar_ID", "Reminder_Minuti"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     for c in cols_standard:
         if c not in df_to_save.columns:
             df_to_save[c] = ""
@@ -495,6 +500,7 @@ with tab1:
         minuti_scelti = 240
 
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
+        escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
 
         submit_button = st.form_submit_button(label="Salva Attività", use_container_width=True)
@@ -543,6 +549,7 @@ with tab1:
                     "Sede": [val_sede],
                     "Modalità": [val_modalita],
                     "Svolto": [svolto_iniziale],
+                    "Escludi_Conteggio": [escludi_conteggio_iniziale],
                     "Note": [note],
                     "Calendar_ID": [str(cal_id) if cal_id else ""],
                     "Reminder_Minuti": [minuti_scelti]
@@ -688,19 +695,22 @@ with tab3:
                 "Seleziona": st.column_config.CheckboxColumn(required=True),
                 "ID": st.column_config.NumberColumn(disabled=True),
                 "Svolto": st.column_config.CheckboxColumn(required=True),
+                "Escludi_Conteggio": st.column_config.CheckboxColumn(required=True),
                 "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
             }
         )
 
-        ore_totali_archivio = df_mostra["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
-        st.info(f"**Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
+        ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
+        st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
             idx_orig = int(riga_ed["ID"])
             val_nuovo_svolto = bool(riga_ed["Svolto"])
-            if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto:
+            val_nuovo_escluso = bool(riga_ed["Escludi_Conteggio"])
+            if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
                 df.loc[idx_orig, "Svolto"] = val_nuovo_svolto
+                df.loc[idx_orig, "Escludi_Conteggio"] = val_nuovo_escluso
                 modificato = True
         if modificato:
             salva_dati(df)
@@ -833,6 +843,9 @@ with tab3:
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
+
+                escluso_corrente = bool(riga_corrente["Escludi_Conteggio"]) if "Escludi_Conteggio" in riga_corrente else False
+                mod_escluso = st.checkbox("Escludi dal conteggio ore", value=escluso_corrente)
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
 
@@ -865,6 +878,7 @@ with tab3:
                         df.loc[riga_idx, "Sede"] = val_sede_finale
                         df.loc[riga_idx, "Modalità"] = val_modalita_finale
                         df.loc[riga_idx, "Svolto"] = mod_svolto
+                        df.loc[riga_idx, "Escludi_Conteggio"] = mod_escluso
                         df.loc[riga_idx, "Note"] = mod_note
                         df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
 
@@ -966,9 +980,10 @@ with tab3:
             else:
                 df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
 
-        ore_totali = df_report["Ore"].sum()
+        # Escludi dal conteggio del report le righe flaggate
+        ore_totali = df_report[df_report["Escludi_Conteggio"] != True]["Ore"].sum()
 
-        st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività trovate | **Totale Ore Report:** **{ore_totali:.2f} ore**")
+        st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività trovate | **Totale Ore Report (escluse quelle flaggate):** **{ore_totali:.2f} ore**")
 
         if not df_report.empty:
             st.markdown("---")
@@ -985,6 +1000,7 @@ with tab3:
                 orario_f = str(row["Orario Fine"])
                 ore_val = row["Ore"]
                 svolto_card = bool(row["Svolto"]) if "Svolto" in row else False
+                escluso_card = bool(row["Escludi_Conteggio"]) if "Escludi_Conteggio" in row else False
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
 
                 if svolto_card:
@@ -1004,10 +1020,12 @@ with tab3:
                         border_color = "#555555"
                     text_style = "color: #ffffff;"
 
+                badge_escluso = " | <span style='color: #ff9999;'>[Escluso conteggio]</span>" if escluso_card else ""
+
                 st.markdown(
                     f"""
                     <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
-                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h)<br>
+                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h){badge_escluso}<br>
                         <strong>Ente:</strong> {ente if ente else 'N/D'} | <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
                         <em>Note:</em> {note if note else 'Nessuna nota'}
                     </div>
@@ -1044,7 +1062,7 @@ with tab3:
                     
             buffer_excel.seek(0)
             st.download_button(
-                label="Scarica Report Excel",
+                label="Scholar Excel (Report)",
                 data=buffer_excel,
                 file_name="report_attivita.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1085,9 +1103,9 @@ with tab3:
                         if nuovo_id:
                             df.loc[idx, "Calendar_ID"] = str(nuovo_id)
                             count_sinc += 1
-                if count_sinc > 0:
-                    salva_dati(df)
-                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
-                    st.rerun()
+                        if count_sinc > 0:
+                            salva_dati(df)
+                            st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
+                            st.rerun()
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
