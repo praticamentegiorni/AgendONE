@@ -794,15 +794,41 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                mod_ente = st.text_input("Ente", value=str(riga_corrente.get("Ente", "")))
-                mod_classe = st.text_input("Classe", value=str(riga_corrente["Classe"]))
-                mod_sede = st.text_input("Sede", value=str(riga_corrente["Sede"]))
-                mod_modalita = st.text_input("Modalità", value=str(riga_corrente["Modalità"]))
+                # Gestione Enti
+                enti_esistenti = config.get("enti", [])
+                val_ente_corrente = str(riga_corrente.get("Ente", ""))
+                idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
+                mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0)
+                mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...")
+
+                # Gestione Classi
+                classi_esistenti = config.get("classi", [])
+                val_classe_corrente = str(riga_corrente.get("Classe", ""))
+                idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
+                mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0)
+                mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...")
+
+                # Gestione Sedi
+                sedi_esistenti = config.get("sedi", [])
+                val_sede_corrente = str(riga_corrente.get("Sede", ""))
+                idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
+                mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0)
+                mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...")
+
+                # Gestione Modalità
+                modalita_esistenti = config.get("modalita", [])
+                val_mod_corrente = str(riga_corrente.get("Modalità", ""))
+                idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
+                mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0)
+                mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...")
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 indice_default_rem = list(opzioni_promemoria.values()).index(attuale_minuti) if attuale_minuti in opzioni_promemoria.values() else 4
-                scelta_prom_mod_label = st.selectbox("Modifica Avviso / Promemoria Calendar", options=list(opzioni_promemoria.keys()), index=indice_default_rem, key="mod_promemoria")
-                minuti_scelti_mod = opzioni_promemoria[scelta_prom_mod_label]
+                
+                # Campo orario notifica disabilitato come richiesto
+                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+                minuti_scelti_mod = attuale_minuti
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
@@ -813,15 +839,30 @@ with tab3:
                     if mod_orario_i_str >= mod_orario_f_str:
                         st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                     else:
+                        val_ente_finale = mod_ente_libero.strip() if mod_ente_libero else mod_ente_sel
+                        val_classe_finale = mod_classe_libera.strip() if mod_classe_libera else mod_classe_sel
+                        val_sede_finale = mod_sede_libera.strip() if mod_sede_libera else mod_sede_sel
+                        val_modalita_finale = mod_modalita_libera.strip() if mod_modalita_libera else mod_modalita_sel
+
+                        if mod_ente_libero and mod_ente_libero not in config["enti"]:
+                            config["enti"].append(mod_ente_libero)
+                        if mod_classe_libera and mod_classe_libera not in config["classi"]:
+                            config["classi"].append(mod_classe_libera)
+                        if mod_sede_libera and mod_sede_libera not in config["sedi"]:
+                            config["sedi"].append(mod_sede_libera)
+                        if mod_modalita_libera and mod_modalita_libera not in config["modalita"]:
+                            config["modalita"].append(mod_modalita_libera)
+                        salva_config(config)
+
                         df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
                         df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
                         df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
                         df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
                         df.loc[riga_idx, "Ore"] = mod_ore_calc
-                        df.loc[riga_idx, "Ente"] = mod_ente
-                        df.loc[riga_idx, "Classe"] = mod_classe
-                        df.loc[riga_idx, "Sede"] = mod_sede
-                        df.loc[riga_idx, "Modalità"] = mod_modalita
+                        df.loc[riga_idx, "Ente"] = val_ente_finale
+                        df.loc[riga_idx, "Classe"] = val_classe_finale
+                        df.loc[riga_idx, "Sede"] = val_sede_finale
+                        df.loc[riga_idx, "Modalità"] = val_modalita_finale
                         df.loc[riga_idx, "Svolto"] = mod_svolto
                         df.loc[riga_idx, "Note"] = mod_note
                         df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
@@ -830,10 +871,10 @@ with tab3:
                             "Data": mod_data.strftime("%Y-%m-%d"),
                             "Orario Inizio": mod_orario_i_str,
                             "Orario Fine": mod_orario_f_str,
-                            "Ente": mod_ente,
-                            "Classe": mod_classe,
-                            "Sede": mod_sede,
-                            "Modalità": mod_modalita,
+                            "Ente": val_ente_finale,
+                            "Classe": val_classe_finale,
+                            "Sede": val_sede_finale,
+                            "Modalità": val_modalita_finale,
                             "Note": mod_note,
                             "Reminder_Minuti": minuti_scelti_mod
                         }
@@ -1017,6 +1058,7 @@ with tab3:
                     data=pdf_data,
                     file_name="report_attivita.pdf",
                     mime="application/pdf",
+                    use_keyword_arguments=True,
                     use_container_width=True
                 )
             else:
