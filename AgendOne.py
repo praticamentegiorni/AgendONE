@@ -10,6 +10,94 @@ st.set_page_config(
     page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
 )
 
+# 1. INIETTA LO STILE CSS DENTRO ST.MARKDOWN
+st.markdown(
+    """
+    <style>
+    /* Pulsanti Frecce Moderni */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .nav-btn:hover {
+      background: #ffffff;
+      transform: translateY(-50%) scale(1.1);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      color: #2563eb;
+    }
+
+    .nav-btn-prev { left: 16px; }
+    .nav-btn-next { right: 16px; }
+
+    .nav-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Banner Popup Ingrandito */
+    .preview-banner {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      width: 85%;
+      max-width: 600px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 20px 24px;
+      border-radius: 14px;
+      box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 20;
+    }
+
+    .carousel-container:hover .preview-banner {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .preview-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 8px 0;
+    }
+
+    .preview-description {
+      font-size: 1.0rem;
+      color: #64748b;
+      margin: 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # File di configurazione locale delle tabelle
 CONFIG_FILE = "config_tabelle.json"
 
@@ -807,36 +895,33 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti, Classi, Sedi e Modalità con menu a tendina e campo di testo libero
-                col_m0, col_m1, col_m2, col_m3 = st.columns(4)
-                
-                with col_m0:
-                    enti_esistenti = config.get("enti", [])
-                    val_ente_corrente = str(riga_corrente.get("Ente", ""))
-                    idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
-                    mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
-                    mod_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="mod_lib_ente")
+                # Gestione Enti con menu a tendina e campo di testo libero
+                enti_esistenti = config.get("enti", [])
+                val_ente_corrente = str(riga_corrente.get("Ente", ""))
+                idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
+                mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
+                mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                with col_m1:
-                    classi_esistenti = config.get("classi", [])
-                    val_classe_corrente = str(riga_corrente.get("Classe", ""))
-                    idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
-                    mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
-                    mod_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="mod_lib_classe")
+                # Gestione Classi con menu a tendina e campo di testo libero
+                classi_esistenti = config.get("classi", [])
+                val_classe_corrente = str(riga_corrente.get("Classe", ""))
+                idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
+                mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
+                mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                with col_m2:
-                    sedi_esistenti = config.get("sedi", [])
-                    val_sede_corrente = str(riga_corrente.get("Sede", ""))
-                    idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
-                    mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
-                    mod_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="mod_lib_sede")
+                # Gestione Sedi con menu a tendina e campo di testo libero
+                sedi_esistenti = config.get("sedi", [])
+                val_sede_corrente = str(riga_corrente.get("Sede", ""))
+                idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
+                mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
+                mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                with col_m3:
-                    modalita_esistenti = config.get("modalita", [])
-                    val_mod_corrente = str(riga_corrente.get("Modalità", ""))
-                    idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
-                    mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
-                    mod_modalita_libera = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="mod_lib_mod")
+                # Gestione Modalità con menu a tendina e campo di testo libero
+                modalita_esistenti = config.get("modalita", [])
+                val_mod_corrente = str(riga_corrente.get("Modalità", ""))
+                idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
+                mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
+                mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 
