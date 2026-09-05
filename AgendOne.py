@@ -59,6 +59,8 @@ st.markdown(
 )
 
 # ... Qui prosegue il resto del tuo codice con la logica del calendario
+
+# ... Qui prosegue il resto del tuo codice con la logica del calendario
 # Configurazione della pagina
 st.set_page_config(
     page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
