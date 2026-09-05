@@ -5,6 +5,38 @@ import os
 import pandas as pd
 import streamlit as st
 
+import streamlit as st
+
+# Iniezione CSS per ingrandire il banner e il testo al passaggio del mouse
+st.markdown(
+    """
+    <style>
+    /* Ingrandisce il container del tooltip/banner */
+    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
+        font-size: 1.25rem !important;  /* Dimensione del testo generale */
+        padding: 12px 16px !important;   /* Spaziatura interna del banner */
+        max-width: 400px !important;     /* Larghezza massima del banner */
+        border-radius: 8px !important;   /* Angoli arrotondati */
+        box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.25) !important; /* Ombra più evidente */
+    }
+
+    /* Ingrandisce il titolo all'interno del banner se presente */
+    .fc-popover-header, .tooltip-title {
+        font-size: 1.4rem !important;
+        font-weight: bold !important;
+        margin-bottom: 6px !important;
+    }
+
+    /* Ingrandisce il corpo/descrizione del testo */
+    .fc-popover-body, .tooltip-inner {
+        font-size: 1.15rem !important;
+        line-height: 1.5 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Configurazione della pagina
 st.set_page_config(
     page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
