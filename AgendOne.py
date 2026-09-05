@@ -7,36 +7,36 @@ import streamlit as st
 
 import streamlit as st
 
-# Iniezione CSS per ingrandire il banner e il testo al passaggio del mouse
+# Iniezione CSS per un banner e un testo ancora più grandi
 st.markdown(
     """
     <style>
-    /* Ingrandisce il container del tooltip/banner */
+    /* Ingrandisce significativamente il contenitore del tooltip/banner */
     .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
-        font-size: 1.25rem !important;  /* Dimensione del testo generale */
-        padding: 12px 16px !important;   /* Spaziatura interna del banner */
-        max-width: 400px !important;     /* Larghezza massima del banner */
-        border-radius: 8px !important;   /* Angoli arrotondati */
-        box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.25) !important; /* Ombra più evidente */
+        font-size: 1.6rem !important;    /* Dimensione testo base molto più grande */
+        padding: 18px 24px !important;   /* Ampia spaziatura interna */
+        min-width: 320px !important;     /* Larghezza minima garantita */
+        max-width: 550px !important;     /* Larghezza massima estesa */
+        border-radius: 12px !important;  /* Angoli ben arrotondati */
+        box-shadow: 0px 6px 18px rgba(0, 0, 0, 0.35) !important; /* Ombra marcata */
     }
 
-    /* Ingrandisce il titolo all'interno del banner se presente */
+    /* Titolo/Intestazione dell'evento nel banner */
     .fc-popover-header, .tooltip-title {
-        font-size: 1.4rem !important;
-        font-weight: bold !important;
-        margin-bottom: 6px !important;
+        font-size: 1.85rem !important;   /* Titolo molto visibile */
+        font-weight: 800 !important;
+        margin-bottom: 10px !important;
     }
 
-    /* Ingrandisce il corpo/descrizione del testo */
+    /* Corpo e descrizione dell'appuntamento */
     .fc-popover-body, .tooltip-inner {
-        font-size: 1.15rem !important;
-        line-height: 1.5 !important;
+        font-size: 1.45rem !important;   /* Testo di dettaglio ben leggibile */
+        line-height: 1.6 !important;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
-
 # Configurazione della pagina
 st.set_page_config(
     page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
