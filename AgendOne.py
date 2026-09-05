@@ -1062,7 +1062,7 @@ with tab3:
                     
             buffer_excel.seek(0)
             st.download_button(
-                label="Scholar Excel (Report)",
+                label="Scarica Excel (Report)",
                 data=buffer_excel,
                 file_name="report_attivita.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
