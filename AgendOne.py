@@ -807,33 +807,36 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti con menu a tendina e campo di testo libero
-                enti_esistenti = config.get("enti", [])
-                val_ente_corrente = str(riga_corrente.get("Ente", ""))
-                idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
-                mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
-                mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
+                # Gestione Enti, Classi, Sedi e Modalità con menu a tendina e campo di testo libero
+                col_m0, col_m1, col_m2, col_m3 = st.columns(4)
+                
+                with col_m0:
+                    enti_esistenti = config.get("enti", [])
+                    val_ente_corrente = str(riga_corrente.get("Ente", ""))
+                    idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
+                    mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
+                    mod_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                # Gestione Classi con menu a tendina e campo di testo libero
-                classi_esistenti = config.get("classi", [])
-                val_classe_corrente = str(riga_corrente.get("Classe", ""))
-                idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
-                mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
-                mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
+                with col_m1:
+                    classi_esistenti = config.get("classi", [])
+                    val_classe_corrente = str(riga_corrente.get("Classe", ""))
+                    idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
+                    mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
+                    mod_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                # Gestione Sedi con menu a tendina e campo di testo libero
-                sedi_esistenti = config.get("sedi", [])
-                val_sede_corrente = str(riga_corrente.get("Sede", ""))
-                idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
-                mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
-                mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
+                with col_m2:
+                    sedi_esistenti = config.get("sedi", [])
+                    val_sede_corrente = str(riga_corrente.get("Sede", ""))
+                    idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
+                    mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
+                    mod_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                # Gestione Modalità con menu a tendina e campo di testo libero
-                modalita_esistenti = config.get("modalita", [])
-                val_mod_corrente = str(riga_corrente.get("Modalità", ""))
-                idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
-                mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
-                mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
+                with col_m3:
+                    modalita_esistenti = config.get("modalita", [])
+                    val_mod_corrente = str(riga_corrente.get("Modalità", ""))
+                    idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
+                    mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
+                    mod_modalita_libera = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 
