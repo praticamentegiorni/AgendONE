@@ -7,30 +7,31 @@ import streamlit as st
 
 import streamlit as st
 
-# Iniezione CSS per un banner e un testo ancora più grandi
+# Iniezione CSS per un banner ed elementi di testo imponenti
 st.markdown(
     """
     <style>
-    /* Ingrandisce significativamente il contenitore del tooltip/banner */
+    /* Contenitore principale del banner in versione Extra Large */
     .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
-        font-size: 1.6rem !important;    /* Dimensione testo base molto più grande */
-        padding: 18px 24px !important;   /* Ampia spaziatura interna */
-        min-width: 320px !important;     /* Larghezza minima garantita */
-        max-width: 550px !important;     /* Larghezza massima estesa */
-        border-radius: 12px !important;  /* Angoli ben arrotondati */
-        box-shadow: 0px 6px 18px rgba(0, 0, 0, 0.35) !important; /* Ombra marcata */
+        font-size: 2.2rem !important;    /* Testo base gigante */
+        padding: 26px 36px !important;   /* Generosa spaziatura interna */
+        min-width: 450px !important;     /* Larghezza minima molto ampia */
+        max-width: 750px !important;     /* Ampio respiro per testi lunghi */
+        border-radius: 16px !important;  /* Bordo decisamente arrotondato */
+        border: 2px solid rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important; /* Ombra molto profonda */
     }
 
-    /* Titolo/Intestazione dell'evento nel banner */
+    /* Titolo dell'appuntamento */
     .fc-popover-header, .tooltip-title {
-        font-size: 1.85rem !important;   /* Titolo molto visibile */
-        font-weight: 800 !important;
-        margin-bottom: 10px !important;
+        font-size: 2.6rem !important;   /* Titolo d'impatto */
+        font-weight: 900 !important;
+        margin-bottom: 14px !important;
     }
 
-    /* Corpo e descrizione dell'appuntamento */
+    /* Corpo, orari e descrizione dell'evento */
     .fc-popover-body, .tooltip-inner {
-        font-size: 1.45rem !important;   /* Testo di dettaglio ben leggibile */
+        font-size: 2.0rem !important;   /* Dettagli estremamente leggibili */
         line-height: 1.6 !important;
     }
     </style>
