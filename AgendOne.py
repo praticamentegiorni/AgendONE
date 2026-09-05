@@ -7,37 +7,58 @@ import streamlit as st
 
 import streamlit as st
 
-# Iniezione CSS per un banner ed elementi di testo imponenti
+# Impostazione pagina (se presente)
+st.set_page_config(page_title="AgendOne", layout="wide")
+
+# INSERISCI QUI IL BLOCCO CSS DEI COLORI E DEI BANNER XL
 st.markdown(
     """
     <style>
-    /* Contenitore principale del banner in versione Extra Large */
-    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
-        font-size: 2.2rem !important;    /* Testo base gigante */
-        padding: 26px 36px !important;   /* Generosa spaziatura interna */
-        min-width: 450px !important;     /* Larghezza minima molto ampia */
-        max-width: 750px !important;     /* Ampio respiro per testi lunghi */
-        border-radius: 16px !important;  /* Bordo decisamente arrotondato */
-        border: 2px solid rgba(255, 255, 255, 0.2) !important;
-        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important; /* Ombra molto profonda */
+    /* Sfondo delle caselle del calendario (celeste chiaro) */
+    .fc-daygrid-day, .fc-timegrid-slot, .fc-theme-standard td {
+        background-color: #e6f2ff !important;
     }
 
-    /* Titolo dell'appuntamento */
+    /* Giorno corrente */
+    .fc-day-today {
+        background-color: #cce5ff !important;
+    }
+
+    /* Eventi / Appuntamenti doppi (Blu) */
+    .fc-event.doppio-appuntamento, 
+    .fc-event[data-type="doppio"], 
+    .event-double {
+        background-color: #0044cc !important;
+        border-color: #002b80 !important;
+        color: #ffffff !important;
+    }
+
+    /* Banner XL al passaggio del mouse */
+    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
+        font-size: 2.2rem !important;
+        padding: 26px 36px !important;
+        min-width: 450px !important;
+        max-width: 750px !important;
+        border-radius: 16px !important;
+        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important;
+    }
+
     .fc-popover-header, .tooltip-title {
-        font-size: 2.6rem !important;   /* Titolo d'impatto */
+        font-size: 2.6rem !important;
         font-weight: 900 !important;
         margin-bottom: 14px !important;
     }
 
-    /* Corpo, orari e descrizione dell'evento */
     .fc-popover-body, .tooltip-inner {
-        font-size: 2.0rem !important;   /* Dettagli estremamente leggibili */
+        font-size: 2.0rem !important;
         line-height: 1.6 !important;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+# ... Qui prosegue il resto del tuo codice con la logica del calendario
 # Configurazione della pagina
 st.set_page_config(
     page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
