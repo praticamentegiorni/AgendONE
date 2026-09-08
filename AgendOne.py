@@ -5,8 +5,6 @@ import os
 import pandas as pd
 import streamlit as st
 
-import streamlit as st
-
 # Impostazione pagina (se presente)
 st.set_page_config(page_title="AgendOne", layout="wide")
 
@@ -56,14 +54,6 @@ st.markdown(
     </style>
     """,
     unsafe_allow_html=True
-)
-
-# ... Qui prosegue il resto del tuo codice con la logica del calendario
-
-# ... Qui prosegue il resto del tuo codice con la logica del calendario
-# Configurazione della pagina
-st.set_page_config(
-    page_title="AgendOne - Gestione Orari e Classi", page_icon="📅", layout="wide"
 )
 
 # 1. INIETTA LO STILE CSS DENTRO ST.MARKDOWN
@@ -626,17 +616,23 @@ with tab1:
         st.caption(f"Durata stimata: **{ore_calcolate} ore**")
 
         col_t0, col_t1, col_t2, col_t3 = st.columns(4)
+        
+        opts_enti = config.get("enti", []).copy()
+        opts_classi = config.get("classi", []).copy()
+        opts_sedi = config.get("sedi", []).copy()
+        opts_modalita = config.get("modalita", []).copy()
+
         with col_t0:
-            ente = st.selectbox("Ente", options=config["enti"], index=0 if config["enti"] else None, key="sel_ente")
+            ente = st.selectbox("Ente", options=opts_enti if opts_enti else [""], index=0 if opts_enti else 0, key="sel_ente")
             nuovo_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="lib_ente")
         with col_t1:
-            classe = st.selectbox("Classe", options=config["classi"], index=0 if config["classi"] else None, key="sel_classe")
+            classe = st.selectbox("Classe", options=opts_classi if opts_classi else [""], index=0 if opts_classi else 0, key="sel_classe")
             nuova_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="lib_classe")
         with col_t2:
-            sede = st.selectbox("Sede", options=config["sedi"], index=0 if config["sedi"] else None, key="sel_sede")
+            sede = st.selectbox("Sede", options=opts_sedi if opts_sedi else [""], index=0 if opts_sedi else 0, key="sel_sede")
             nuova_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="lib_sede")
         with col_t3:
-            modalita = st.selectbox("Modalità", options=config["modalita"], index=0 if config["modalita"] else None, key="sel_mod")
+            modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
         # Campo orario notifica disabilitato come richiesto
@@ -951,30 +947,38 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti con menu a tendina e campo di testo libero
-                enti_esistenti = config.get("enti", [])
-                val_ente_corrente = str(riga_corrente.get("Ente", ""))
+                # Gestione Enti con menu a tendina e inserimento dinamico
+                enti_esistenti = config.get("enti", []).copy()
+                val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
+                if val_ente_corrente and val_ente_corrente not in enti_esistenti:
+                    enti_esistenti.append(val_ente_corrente)
                 idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
                 mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
                 mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                # Gestione Classi con menu a tendina e campo di testo libero
-                classi_esistenti = config.get("classi", [])
-                val_classe_corrente = str(riga_corrente.get("Classe", ""))
+                # Gestione Classi con menu a tendina e inserimento dinamico
+                classi_esistenti = config.get("classi", []).copy()
+                val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
+                if val_classe_corrente and val_classe_corrente not in classi_esistenti:
+                    classi_esistenti.append(val_classe_corrente)
                 idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
                 mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
                 mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                # Gestione Sedi con menu a tendina e campo di testo libero
-                sedi_esistenti = config.get("sedi", [])
-                val_sede_corrente = str(riga_corrente.get("Sede", ""))
+                # Gestione Sedi con menu a tendina e inserimento dinamico
+                sedi_esistenti = config.get("sedi", []).copy()
+                val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
+                if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
+                    sedi_esistenti.append(val_sede_corrente)
                 idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
                 mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
                 mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                # Gestione Modalità con menu a tendina e campo di testo libero
-                modalita_esistenti = config.get("modalita", [])
-                val_mod_corrente = str(riga_corrente.get("Modalità", ""))
+                # Gestione Modalità con menu a tendina e inserimento dinamico
+                modalita_esistenti = config.get("modalita", []).copy()
+                val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
+                if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
+                    modalita_esistenti.append(val_mod_corrente)
                 idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
                 mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
                 mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
@@ -1248,10 +1252,10 @@ with tab3:
                         if nuovo_id:
                             df.loc[idx, "Calendar_ID"] = str(nuovo_id)
                             count_sinc += 1
-                        if count_sinc > 0:
-                            salva_dati(df)
-                            st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
-                            st.rerun()
+                if count_sinc > 0:
+                    salva_dati(df)
+                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
+                    st.rerun()
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
