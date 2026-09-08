@@ -405,7 +405,7 @@ def get_gspread_client_and_sheet():
 # --- CODICE DI TEST (PUNTO 3) ---
 st.subheader("Test Lettura Grezza:")
 dati_grezzi = worksheet.get_all_values()
-st.write(dati_grezzi
+st.write(dati_grezzi)
          
 # Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
