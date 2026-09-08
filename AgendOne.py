@@ -399,10 +399,14 @@ def get_gspread_client_and_sheet():
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
         return spreadsheet.worksheet("Foglio1")
-        st.write(dati_grezzi)
     except Exception as e:
         return None
-
+        
+# --- CODICE DI TEST (PUNTO 3) ---
+st.subheader("Test Lettura Grezza:")
+dati_grezzi = worksheet.get_all_values()
+st.write(dati_grezzi
+         
 # Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
