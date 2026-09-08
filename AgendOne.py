@@ -399,6 +399,7 @@ def get_gspread_client_and_sheet():
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
         return spreadsheet.worksheet("Foglio1")
+        st.write(dati_grezzi)
     except Exception as e:
         return None
 
