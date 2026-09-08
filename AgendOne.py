@@ -410,7 +410,7 @@ def get_gspread_client_and_sheet():
     except Exception as e:
         st.error(f"Errore durante la connessione: {e}")  # Mostra l'errore se la connessione fallisce
         return None
-        
+
 # Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
