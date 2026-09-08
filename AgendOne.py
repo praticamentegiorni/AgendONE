@@ -5,13 +5,38 @@ import os
 import pandas as pd
 import streamlit as st
 
-# Impostazione pagina (se presente)
+# Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
 
-# INSERISCI QUI IL BLOCCO CSS DEI COLORI E DEI BANNER XL
+# CSS PERSONALIZZATO PER IL MENU IN ALTO E LA VISTA CALENDARIO
 st.markdown(
     """
     <style>
+    /* Ingrandimento e messa in evidenza dei Tab del Menu Principale */
+    button[data-baseweb="tab"] {
+        font-size: 20px !important;
+        font-weight: bold !important;
+        background-color: #1e293b !important;
+        color: #f8fafc !important;
+        padding: 12px 24px !important;
+        border-radius: 10px 10px 0px 0px !important;
+        margin-right: 6px !important;
+        border: 1px solid #334155 !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+
+    button[data-baseweb="tab"]:hover {
+        background-color: #334155 !important;
+        color: #ffffff !important;
+    }
+
+    /* Stato del Tab Selezionato */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+        border-bottom: 3px solid #60a5fa !important;
+    }
+
     /* Sfondo delle caselle del calendario (celeste chiaro) */
     .fc-daygrid-day, .fc-timegrid-slot, .fc-theme-standard td {
         background-color: #e6f2ff !important;
@@ -51,16 +76,8 @@ st.markdown(
         font-size: 2.0rem !important;
         line-height: 1.6 !important;
     }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
-# 1. INIETTA LO STILE CSS DENTRO ST.MARKDOWN
-st.markdown(
-    """
-    <style>
-    /* Pulsanti Frecce Moderni */
+    /* Pulsanti Frecce Moderni Carousel */
     .nav-btn {
       position: absolute;
       top: 50%;
@@ -141,7 +158,7 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
 
 # File di configurazione locale delle tabelle
@@ -166,7 +183,7 @@ MESI_ITALIANI = {
 def traduci_mese(mese_en):
     return MESI_ITALIANI.get(mese_en, mese_en)
 
-# Parser robusto per date in formato italiano DD/MM/YYYY o ISO YYYY-MM-DD
+# Parser per date in formato italiano DD/MM/YYYY o ISO YYYY-MM-DD
 def parse_data_italiana(val):
     if pd.isna(val) or str(val).strip() == "" or str(val).lower() == "none" or str(val).lower() == "nan":
         return pd.NaT
@@ -208,13 +225,14 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
-# Funzione per generare il Report in formato PDF professionale con parziali per ente e classe
+# Funzione per generare il Report PDF raggruppato per Ente con parziali e indicazione delle attività escluse
 def genera_pdf_report(df_report):
     try:
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
+        from collections import defaultdict
         
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -229,24 +247,29 @@ def genera_pdf_report(df_report):
         
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor('#1c3d73'), spaceAfter=6)
-        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=4)
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#1c3d73'), spaceAfter=4)
+        ente_header_style = ParagraphStyle('EnteHeaderStyle', parent=styles['Heading3'], fontSize=10, textColor=colors.HexColor('#0f172a'), spaceAfter=3, fontName='Helvetica-Bold')
         
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
+        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
         elements.append(Spacer(1, 6))
         
+        # Scomposizione per inclusi ed esclusi
+        df_validi = df_report[df_report["Escludi_Conteggio"] != True] if "Escludi_Conteggio" in df_report.columns else df_report
+        
         # --- TABELLA RIEPILOGO PARZIALI PER ENTE ---
-        elements.append(Paragraph("Riepilogo Parziali per Ente di Appartenenza", subtitle_style))
-        if not df_report.empty and "Ente" in df_report.columns and "Ore" in df_report.columns:
-            df_summary_ente = df_report.groupby("Ente")["Ore"].sum().reset_index()
+        elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza", subtitle_style))
+        if not df_validi.empty and "Ente" in df_validi.columns and "Ore" in df_validi.columns:
+            df_summary_ente = df_validi.groupby("Ente")["Ore"].sum().reset_index()
             summary_ente_data = [[Paragraph("Ente di Appartenenza", th_style), Paragraph("Ore Totali Parziali", th_style)]]
             
             for _, row in df_summary_ente.iterrows():
                 summary_ente_data.append([
-                    Paragraph(str(row["Ente"]), td_summary_style),
+                    Paragraph(str(row["Ente"]) if row["Ente"] else "Non Specificato", td_summary_style),
                     Paragraph(f"{row['Ore']:.2f} h", td_summary_style)
                 ])
             
@@ -257,88 +280,96 @@ def genera_pdf_report(df_report):
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 4),
                 ('TOPPADDING', (0,0), (-1,-1), 4),
-                ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f9f9f9')),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+                ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f8fafc')),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
             ]))
             elements.append(t_summary_ente)
-            elements.append(Spacer(1, 8))
+            elements.append(Spacer(1, 10))
 
-        # --- TABELLA RIEPILOGO PARZIALI PER CLASSE ---
-        elements.append(Paragraph("Riepilogo Parziali per Classe / Committente", subtitle_style))
-        if not df_report.empty and "Classe" in df_report.columns and "Ore" in df_report.columns:
-            df_summary = df_report.groupby("Classe")["Ore"].sum().reset_index()
-            summary_data = [[Paragraph("Classe / Committente", th_style), Paragraph("Ore Totali Parziali", th_style)]]
-            
-            for _, row in df_summary.iterrows():
-                summary_data.append([
-                    Paragraph(str(row["Classe"]), td_summary_style),
-                    Paragraph(f"{row['Ore']:.2f} h", td_summary_style)
-                ])
-            
-            t_summary = Table(summary_data, colWidths=[600, 180])
-            t_summary.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c3d73')),
-                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-                ('TOPPADDING', (0,0), (-1,-1), 4),
-                ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f9f9f9')),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
-            ]))
-            elements.append(t_summary)
+        elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente", subtitle_style))
+        elements.append(Spacer(1, 4))
         
-        elements.append(Spacer(1, 10))
-        elements.append(Paragraph("Elenco Dettagliato Attività", subtitle_style))
-        
-        # --- TABELLA DETTAGLIATA ATTIVITÀ ---
+        # --- RAGGRUPPAMENTO ATTIVITÀ PER ENTE ED ELENCO DETTAGLIATO ---
         if not df_report.empty:
-            det_data = [[
-                Paragraph("Data", th_style),
-                Paragraph("Orario", th_style),
-                Paragraph("Ente", th_style),
-                Paragraph("Classe / Committente", th_style),
-                Paragraph("Sede", th_style),
-                Paragraph("Modalità", th_style),
-                Paragraph("Note / Dettagli", th_style),
-                Paragraph("Ore", th_style)
-            ]]
-            
+            grutti_ente = defaultdict(list)
             for _, row in df_report.iterrows():
-                parsed_dt = parse_data_italiana(row.get("Data", ""))
-                data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                e_nome = str(row.get("Ente", "")).strip()
+                if not e_nome or e_nome.lower() == "nan":
+                    e_nome = "Non Specificato"
+                grutti_ente[e_nome].append(row)
                 
+            col_widths = [60, 75, 120, 100, 75, 220, 52]
+
+            for ente_nome, lista_attivita in grutti_ente.items():
+                elements.append(Paragraph(f"Ente: <b>{ente_nome}</b>", ente_header_style))
+                
+                det_data = [[
+                    Paragraph("Data", th_style),
+                    Paragraph("Orario", th_style),
+                    Paragraph("Classe / Committente", th_style),
+                    Paragraph("Sede", th_style),
+                    Paragraph("Modalità", th_style),
+                    Paragraph("Note / Dettagli", th_style),
+                    Paragraph("Ore", th_style)
+                ]]
+                
+                totale_ore_ente = 0.0
+                
+                for row in lista_attivita:
+                    parsed_dt = parse_data_italiana(row.get("Data", ""))
+                    data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                    is_esclusa = bool(row.get("Escludi_Conteggio", False))
+                    ore_val = float(row.get("Ore", 0.0))
+                    
+                    if not is_esclusa:
+                        totale_ore_ente += ore_val
+                        ore_str = f"{ore_val:.2f}h"
+                        cur_td_style = td_style
+                        note_str = str(row.get("Note", ""))
+                    else:
+                        ore_str = "0.00h"
+                        cur_td_style = td_excl_style
+                        note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
+
+                    det_data.append([
+                        Paragraph(data_str, cur_td_style),
+                        Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
+                        Paragraph(str(row.get("Classe", "")), cur_td_style),
+                        Paragraph(str(row.get("Sede", "")), cur_td_style),
+                        Paragraph(str(row.get("Modalità", "")), cur_td_style),
+                        Paragraph(note_str, cur_td_style),
+                        Paragraph(ore_str, cur_td_style)
+                    ])
+                
+                # Aggiunta riga di Parziale Ore per l'Ente
                 det_data.append([
-                    Paragraph(data_str, td_style),
-                    Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", td_style),
-                    Paragraph(str(row.get("Ente", "")), td_style),
-                    Paragraph(str(row.get("Classe", "")), td_style),
-                    Paragraph(str(row.get("Sede", "")), td_style),
-                    Paragraph(str(row.get("Modalità", "")), td_style),
-                    Paragraph(str(row.get("Note", "")), td_style),
-                    Paragraph(f"{row.get('Ore', 0):.2f}h", td_style)
+                    Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
+                    "", "", "", "", "",
+                    Paragraph(f"<b>{totale_ore_ente:.2f}h</b>", ParagraphStyle('SubTotVal', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73')))
                 ])
+
+                t_det = Table(det_data, colWidths=col_widths)
+                t_det.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+                    ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('TOPPADDING', (0,0), (-1,-1), 4),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+                    ('SPAN', (0, -1), (5, -1)), # Unisce le prime celle della riga del subtotale
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f1f5f9')),
+                ]))
+                elements.append(t_det)
+                elements.append(Spacer(1, 8))
             
-            t_det = Table(det_data, colWidths=[60, 75, 110, 110, 90, 75, 230, 52])
-            t_det.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
-                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-                ('TOPPADDING', (0,0), (-1,-1), 4),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-                ('LINEBELOW', (0,1), (-1,-1), 0.5, colors.HexColor('#eeeeee')),
-            ]))
-            elements.append(t_det)
-            
-            elements.append(Spacer(1, 8))
-            totale_generale = df_report["Ore"].sum()
-            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73')))]], colWidths=[802])
+            totale_generale = df_validi["Ore"].sum() if not df_validi.empty else 0.0
+            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'), fontSize=10))]], colWidths=[802])
             t_tot.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
                 ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-                ('TOPPADDING', (0,0), (-1,-1), 5),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
             ]))
             elements.append(t_tot)
         
@@ -572,10 +603,10 @@ st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "Inserisci Attività",
-    "Gestione Tabelle & Combo",
-    "Archivio, Modifica, Report & Riepilogo",
-    "Calendario",
+    "📌 Inserisci Attività",
+    "⚙️ Gestione Tabelle & Combo",
+    "📂 Archivio, Modifica, Report & Riepilogo",
+    "📅 Calendario",
 ])
 
 opzioni_promemoria = {
@@ -635,7 +666,6 @@ with tab1:
             modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        # Campo orario notifica disabilitato come richiesto
         st.selectbox("Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
         st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
         minuti_scelti = 240
@@ -947,7 +977,7 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti con menu a tendina e inserimento dinamico
+                # Gestione Enti
                 enti_esistenti = config.get("enti", []).copy()
                 val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
                 if val_ente_corrente and val_ente_corrente not in enti_esistenti:
@@ -956,7 +986,7 @@ with tab3:
                 mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
                 mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                # Gestione Classi con menu a tendina e inserimento dinamico
+                # Gestione Classi
                 classi_esistenti = config.get("classi", []).copy()
                 val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
                 if val_classe_corrente and val_classe_corrente not in classi_esistenti:
@@ -965,7 +995,7 @@ with tab3:
                 mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
                 mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                # Gestione Sedi con menu a tendina e inserimento dinamico
+                # Gestione Sedi
                 sedi_esistenti = config.get("sedi", []).copy()
                 val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
                 if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
@@ -974,7 +1004,7 @@ with tab3:
                 mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
                 mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                # Gestione Modalità con menu a tendina e inserimento dinamico
+                # Gestione Modalità
                 modalita_esistenti = config.get("modalita", []).copy()
                 val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
                 if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
@@ -985,7 +1015,6 @@ with tab3:
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
                 
-                # Campo orario notifica disabilitato come richiesto
                 st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
                 st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
                 minuti_scelti_mod = attuale_minuti
@@ -1263,13 +1292,11 @@ with tab3:
 with tab4:
     st.subheader("Vista Calendario Mensile")
     
-    # Inizializzazione dello stato per anno e mese correnti se non presenti
     if "cal_anno" not in st.session_state:
         st.session_state["cal_anno"] = datetime.date.today().year
     if "cal_mese" not in st.session_state:
         st.session_state["cal_mese"] = datetime.date.today().month
 
-    # Pulsanti per scorrere avanti e indietro di mese in mese e anno in anno
     col_nav1, col_nav2, col_nav3, col_nav4, col_nav5 = st.columns([1, 1, 2, 1, 1])
     with col_nav1:
         if st.button("<< Anno -", use_container_width=True):
@@ -1301,13 +1328,11 @@ with tab4:
 
     st.markdown("---")
 
-    # Preparazione dataframe e filtraggio per il mese/anno selezionato
     df_cal = df.copy()
     if not df_cal.empty:
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
         
-        # Filtro per anno e mese
         df_mese = df_cal[
             (df_cal["Data_dt"].notna()) & 
             (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
@@ -1316,7 +1341,6 @@ with tab4:
     else:
         df_mese = pd.DataFrame()
 
-    # Informazioni mensili: Numero Appuntamenti mensili e Ore appuntamenti mensili (senza gli esclusi dal conteggio)
     num_appuntamenti_mensili = len(df_mese)
     df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
     ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_ore_valide.empty else 0.0
@@ -1337,14 +1361,12 @@ with tab4:
         unsafe_allow_html=True
     )
 
-    # Generazione griglia calendario mensile (Settimana che inizia di Lunedì -> 0)
     import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
 
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
     
-    # Mappa degli impegni per giorno del mese {giorno: [lista_dettagli]}
     impegni_per_giorno = {}
     if not df_mese.empty:
         for _, row in df_mese.iterrows():
@@ -1375,7 +1397,6 @@ with tab4:
                 "escluso": escluso_val
             })
 
-    # Costruzione HTML della griglia a quadratini/rettangoli con tooltip CSS al passaggio del mouse
     html_cal = """
     <style>
       .cal-table {
@@ -1433,7 +1454,6 @@ with tab4:
         text-align: center;
         font-weight: bold;
       }
-      /* Tooltip CSS con passaggio del mouse */
       .tooltip-container {
         position: relative;
         display: block;
@@ -1478,7 +1498,6 @@ with tab4:
                 html_cal += '<td class="cal-cell-empty"></td>'
             else:
                 ha_impegni = giorno in impegni_per_giorno
-                # Giorni con impegni segnati di un altro colore (es. sfondo leggermente diverso o bordo evidenziato)
                 bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
                 
                 html_cal += f'<td class="cal-cell" style="{bg_style}">'
@@ -1486,7 +1505,6 @@ with tab4:
 
                 if ha_impegni:
                     lista_imp = impegni_per_giorno[giorno]
-                    # Costruzione del dettaglio per il tooltip
                     dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b><hr style='margin: 4px 0; border-color: #444;'>"
                     for imp in lista_imp:
                         barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
@@ -1499,7 +1517,6 @@ with tab4:
                             dettaglio_html += f"<em>Note:</em> {imp['note']}"
                         dettaglio_html += "</div>"
 
-                    # Se c'è un impegno o più impegni, mostriamo il badge con tooltip al passaggio del mouse
                     html_cal += f'<div class="tooltip-container">'
                     if len(lista_imp) == 1:
                         imp_singolo = lista_imp[0]
