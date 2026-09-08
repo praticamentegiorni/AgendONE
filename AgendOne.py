@@ -12,29 +12,44 @@ st.set_page_config(page_title="AgendOne", layout="wide")
 st.markdown(
     """
     <style>
-    /* Ingrandimento e messa in evidenza dei Tab del Menu Principale */
+    /* Ingrandimento e messa in evidenza dei Tab del Menu Principale a forma di Pulsante */
     button[data-baseweb="tab"] {
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: bold !important;
         background-color: #1e293b !important;
         color: #f8fafc !important;
         padding: 12px 24px !important;
-        border-radius: 10px 10px 0px 0px !important;
-        margin-right: 6px !important;
+        border-radius: 8px !important; /* Arrotondati su tutti i lati per sembrare bottoni */
+        margin-right: 10px !important;
         border: 1px solid #334155 !important;
         transition: all 0.2s ease-in-out !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
 
     button[data-baseweb="tab"]:hover {
         background-color: #334155 !important;
         color: #ffffff !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+        transform: translateY(-2px) !important;
     }
 
     /* Stato del Tab Selezionato */
     button[data-baseweb="tab"][aria-selected="true"] {
         background-color: #2563eb !important;
         color: #ffffff !important;
-        border-bottom: 3px solid #60a5fa !important;
+        border: 1px solid #2563eb !important;
+        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4) !important;
+    }
+    
+    /* Nasconde la linea di base di Streamlit e l'animazione della riga sotto i tab */
+    div[data-baseweb="tab-highlight"] {
+        display: none !important;
+    }
+    div[data-baseweb="tab-border"] {
+        display: none !important;
+    }
+    div[data-baseweb="tab-list"] {
+        gap: 10px;
     }
 
     /* Sfondo delle caselle del calendario (celeste chiaro) */
@@ -679,10 +694,10 @@ st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📌 Inserisci Attività",
-    "⚙️ Gestione Tabelle & Combo",
-    "📂 Archivio, Modifica, Report & Riepilogo",
-    "📅 Calendario",
+    "Inserisci Attività",
+    "Gestione Tabelle & Combo",
+    "Archivio, Modifica, Report & Riepilogo",
+    "Calendario",
 ])
 
 opzioni_promemoria = {
