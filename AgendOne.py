@@ -401,9 +401,9 @@ def get_gspread_client_and_sheet():
         worksheet = spreadsheet.worksheet("Foglio1")
         return worksheet
     except Exception as e:
-        st.error(f"Errore durante la connessione: {e}")
+        st.error(f"Errore durante la connessione a Google Sheets: {e}")
         return None
-        
+
 # Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
@@ -441,7 +441,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             data_str = dati_evento["Data"]
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
-            reminder_min = int(dati_evento.get("Reminder_Minuti", 240))
 
             body = {
                 'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
@@ -456,10 +455,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'timeZone': 'Europe/Rome',
                 },
                 'reminders': {
-                    'useDefault': False,
-                    'overrides': [
-                        {'method': 'popup', 'minutes': reminder_min}
-                    ],
+                    'useDefault': True,
                 },
             }
 
@@ -499,18 +495,21 @@ def carica_config():
         "modalita": ["Presenza", "Videolezione"],
     }
     
+    # 1. Prova a caricare dal Foglio1 di Google Sheets
     try:
         worksheet = get_gspread_client_and_sheet()
         if worksheet:
             all_vals = worksheet.get_all_values()
             if len(all_vals) >= 29:
                 config_from_sheet = {"enti": [], "classi": [], "sedi": [], "modalita": []}
+                # Legge le prime righe di opzioni (es. righe 3..25)
                 for r in all_vals[2:25]:
                     if len(r) > 0 and r[0].strip(): config_from_sheet["enti"].append(r[0].strip())
                     if len(r) > 1 and r[1].strip(): config_from_sheet["classi"].append(r[1].strip())
                     if len(r) > 2 and r[2].strip(): config_from_sheet["sedi"].append(r[2].strip())
                     if len(r) > 3 and r[3].strip(): config_from_sheet["modalita"].append(r[3].strip())
                 
+                # Rimuove le intestazioni di tabella se presenti nelle liste lette
                 for k in config_from_sheet:
                     config_from_sheet[k] = [x for x in config_from_sheet[k] if str(x).lower() not in ["enti", "classi", "sedi", "modalità", "modalita"]]
                 
@@ -519,6 +518,7 @@ def carica_config():
     except Exception:
         pass
 
+    # 2. Fallback su file locale config_tabelle.json
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
@@ -536,12 +536,15 @@ def carica_config():
     return default_config
 
 def salva_config(config):
+    # Salvataggio su file JSON locale
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f)
         
+    # Salvataggio integrato nelle tabelle dinamiche di Foglio1
     try:
         worksheet = get_gspread_client_and_sheet()
         if worksheet:
+            # Pulisce l'area delle opzioni (righe 1..25, colonne A..D)
             worksheet.batch_clear(["A1:D25"])
             
             headers = ["Enti", "Classi", "Sedi", "Modalità"]
@@ -575,11 +578,13 @@ def carica_dati():
         if not all_vals:
             return empty_df
             
+        # Se Foglio1 contiene la struttura a blocchi con tabelle nelle prime righe, i dati partono dalla riga 29 (A29:N29)
         if len(all_vals) >= 29 and any(all_vals[28]):
             header = all_vals[28]
             rows = all_vals[29:]
             df = pd.DataFrame(rows, columns=header)
         else:
+            # Fallback per fogli con struttura dati standard dalla riga 1
             data = worksheet.get_all_records()
             if not data:
                 return empty_df
@@ -630,7 +635,7 @@ def carica_dati():
     except Exception as e:
         return empty_df
 
-# Salvataggio dati su Google Sheets
+# Salvataggio dati su Google Sheets (nel foglio unico Foglio1)
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
@@ -646,16 +651,14 @@ def salva_dati(df_to_save):
             st.error("Impossibile connettersi a Google Sheets. Verifica i Secrets.")
             return
             
-        all_vals = worksheet.get_all_values()
+        # Svuota l'area dell'archivio delle attività a partire dalla riga 29
+        worksheet.batch_clear(["A29:N1000"])
         
-        if len(all_vals) >= 28:
-            worksheet.batch_clear(["A29:N1000"])
-            righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-            worksheet.update("A29", righe)
-        else:
-            worksheet.clear()
-            righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-            worksheet.update("A1", righe)
+        # Prepara la matrice dei dati (intestazioni + righe)
+        righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        
+        # Scrive i dati partendo esattamente dalla riga 29
+        worksheet.update("A29", righe)
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
@@ -728,12 +731,9 @@ with tab1:
             modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        scelta_promemoria = st.selectbox(
-            "Avviso / Promemoria Google Calendar",
-            options=list(opzioni_promemoria.keys()),
-            index=4
-        )
-        minuti_scelti = opzioni_promemoria[scelta_promemoria]
+        st.selectbox("Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+        st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+        minuti_scelti = 240
 
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
         escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
@@ -1079,19 +1079,10 @@ with tab3:
                 mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
-                def_idx_rem = 4
-                for idx_opt, (lab, val_m) in enumerate(opzioni_promemoria.items()):
-                    if val_m == attuale_minuti:
-                        def_idx_rem = idx_opt
-                        break
-
-                mod_scelta_promemoria = st.selectbox(
-                    "Avviso / Promemoria Google Calendar",
-                    options=list(opzioni_promemoria.keys()),
-                    index=def_idx_rem,
-                    key="mod_sel_promemoria"
-                )
-                minuti_scelti_mod = opzioni_promemoria[mod_scelta_promemoria]
+                
+                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+                minuti_scelti_mod = attuale_minuti
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
