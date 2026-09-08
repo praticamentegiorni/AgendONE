@@ -222,7 +222,7 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
-# Funzione per generare il Report PDF raggruppato per Ente
+# Funzione per generare il Report PDF raggruppato per Ente e Classe
 def genera_pdf_report(df_report):
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -252,6 +252,10 @@ def genera_pdf_report(df_report):
         td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
+        # Nuovi stili per i totali parziali della classe (Testo in Blu)
+        style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
+        style_subtot_val_classe = ParagraphStyle('SubTotValClasse', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
+
         elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
         elements.append(Spacer(1, 6))
         
@@ -281,20 +285,26 @@ def genera_pdf_report(df_report):
             elements.append(t_summary_ente)
             elements.append(Spacer(1, 10))
 
-        elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente", subtitle_style))
+        elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente e Classe", subtitle_style))
         elements.append(Spacer(1, 4))
         
         if not df_report.empty:
-            grutti_ente = defaultdict(list)
+            # Raggruppamento per Ente e poi per Classe
+            gruppi_ente_classe = defaultdict(lambda: defaultdict(list))
             for _, row in df_report.iterrows():
                 e_nome = str(row.get("Ente", "")).strip()
                 if not e_nome or e_nome.lower() == "nan":
                     e_nome = "Non Specificato"
-                grutti_ente[e_nome].append(row)
+                
+                c_nome = str(row.get("Classe", "")).strip()
+                if not c_nome or c_nome.lower() == "nan":
+                    c_nome = "Non Specificata"
+                    
+                gruppi_ente_classe[e_nome][c_nome].append(row)
                 
             col_widths = [60, 75, 120, 100, 75, 220, 52]
 
-            for ente_nome, lista_attivita in grutti_ente.items():
+            for ente_nome, classi_dict in gruppi_ente_classe.items():
                 elements.append(Paragraph(f"Ente: <b>{ente_nome}</b>", ente_header_style))
                 
                 det_data = [[
@@ -307,51 +317,74 @@ def genera_pdf_report(df_report):
                     Paragraph("Ore", th_style)
                 ]]
                 
-                totale_ore_ente = 0.0
-                
-                for row in lista_attivita:
-                    parsed_dt = parse_data_italiana(row.get("Data", ""))
-                    data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
-                    is_esclusa = bool(row.get("Escludi_Conteggio", False))
-                    ore_val = float(row.get("Ore", 0.0))
-                    
-                    if not is_esclusa:
-                        totale_ore_ente += ore_val
-                        ore_str = f"{ore_val:.2f}h"
-                        cur_td_style = td_style
-                        note_str = str(row.get("Note", ""))
-                    else:
-                        ore_str = "0.00h"
-                        cur_td_style = td_excl_style
-                        note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
-
-                    det_data.append([
-                        Paragraph(data_str, cur_td_style),
-                        Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
-                        Paragraph(str(row.get("Classe", "")), cur_td_style),
-                        Paragraph(str(row.get("Sede", "")), cur_td_style),
-                        Paragraph(str(row.get("Modalità", "")), cur_td_style),
-                        Paragraph(note_str, cur_td_style),
-                        Paragraph(ore_str, cur_td_style)
-                    ])
-                
-                det_data.append([
-                    Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
-                    "", "", "", "", "",
-                    Paragraph(f"<b>{totale_ore_ente:.2f}h</b>", ParagraphStyle('SubTotVal', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73')))
-                ])
-
-                t_det = Table(det_data, colWidths=col_widths)
-                t_det.setStyle(TableStyle([
+                table_styles = [
                     ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
                     ('ALIGN', (0,0), (-1,-1), 'LEFT'),
                     ('VALIGN', (0,0), (-1,-1), 'TOP'),
                     ('BOTTOMPADDING', (0,0), (-1,-1), 4),
                     ('TOPPADDING', (0,0), (-1,-1), 4),
                     ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
-                    ('SPAN', (0, -1), (5, -1)),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f1f5f9')),
-                ]))
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f1f5f9')),
+                ]
+                
+                totale_ore_ente = 0.0
+                row_idx = 1 # Contatore per calcolare dinamicamente gli SPAN sulle righe
+                
+                for classe_nome, lista_attivita in classi_dict.items():
+                    totale_ore_classe = 0.0
+                    
+                    for row in lista_attivita:
+                        parsed_dt = parse_data_italiana(row.get("Data", ""))
+                        data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                        is_esclusa = bool(row.get("Escludi_Conteggio", False))
+                        ore_val = float(row.get("Ore", 0.0))
+                        
+                        if not is_esclusa:
+                            totale_ore_classe += ore_val
+                            totale_ore_ente += ore_val
+                            ore_str = f"{ore_val:.2f}h"
+                            cur_td_style = td_style
+                            note_str = str(row.get("Note", ""))
+                        else:
+                            ore_str = "0.00h"
+                            cur_td_style = td_excl_style
+                            note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
+
+                        det_data.append([
+                            Paragraph(data_str, cur_td_style),
+                            Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
+                            Paragraph(str(row.get("Classe", "")), cur_td_style),
+                            Paragraph(str(row.get("Sede", "")), cur_td_style),
+                            Paragraph(str(row.get("Modalità", "")), cur_td_style),
+                            Paragraph(note_str, cur_td_style),
+                            Paragraph(ore_str, cur_td_style)
+                        ])
+                        row_idx += 1
+                    
+                    # --- Riga del Parziale CLASSE in Blu ---
+                    det_data.append([
+                        Paragraph(f"<b>Totale parziale ({classe_nome}):</b>", style_subtot_classe),
+                        "", "", "", "", "",
+                        Paragraph(f"<b>{totale_ore_classe:.2f}h</b>", style_subtot_val_classe)
+                    ])
+                    # Unisco le celle da colonna 0 a 5 sulla riga corrente
+                    table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
+                    # Aggiungo un leggerissimo sfondo celeste per la riga della classe
+                    table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
+                    row_idx += 1
+
+                # --- Riga Totale ENTE ---
+                det_data.append([
+                    Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
+                    "", "", "", "", "",
+                    Paragraph(f"<b>{totale_ore_ente:.2f}h</b>", ParagraphStyle('SubTotVal', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73')))
+                ])
+                table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
+                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e2e8f0')))
+                row_idx += 1
+
+                t_det = Table(det_data, colWidths=col_widths)
+                t_det.setStyle(TableStyle(table_styles))
                 elements.append(t_det)
                 elements.append(Spacer(1, 8))
             
