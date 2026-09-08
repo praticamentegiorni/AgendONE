@@ -398,12 +398,17 @@ def get_gspread_client_and_sheet():
         
         client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
-        return spreadsheet.worksheet("Foglio1")
+        worksheet = spreadsheet.worksheet("Foglio1")
+
         # --- CODICE DI TEST (PUNTO 3) ---
         st.subheader("Test Lettura Grezza:")
         dati_grezzi = worksheet.get_all_values()
         st.write(dati_grezzi)
+        # ---------------------------------
+
+        return worksheet
     except Exception as e:
+        st.error(f"Errore durante la connessione: {e}")  # Mostra l'errore se la connessione fallisce
         return None
         
 # Funzione per sincronizzare l'evento su Google Calendar
