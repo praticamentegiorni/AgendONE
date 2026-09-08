@@ -258,10 +258,8 @@ def genera_pdf_report(df_report):
         elements.append(Paragraph("Report Attività e Riepilogo Ore - AgendOne", title_style))
         elements.append(Spacer(1, 6))
         
-        # Scomposizione per inclusi ed esclusi
         df_validi = df_report[df_report["Escludi_Conteggio"] != True] if "Escludi_Conteggio" in df_report.columns else df_report
         
-        # --- TABELLA RIEPILOGO PARZIALI PER ENTE ---
         elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza", subtitle_style))
         if not df_validi.empty and "Ente" in df_validi.columns and "Ore" in df_validi.columns:
             df_summary_ente = df_validi.groupby("Ente")["Ore"].sum().reset_index()
@@ -289,7 +287,6 @@ def genera_pdf_report(df_report):
         elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente", subtitle_style))
         elements.append(Spacer(1, 4))
         
-        # --- RAGGRUPPAMENTO ATTIVITÀ PER ENTE ED ELENCO DETTAGLIATO ---
         if not df_report.empty:
             grutti_ente = defaultdict(list)
             for _, row in df_report.iterrows():
@@ -341,7 +338,6 @@ def genera_pdf_report(df_report):
                         Paragraph(ore_str, cur_td_style)
                     ])
                 
-                # Aggiunta riga di Parziale Ore per l'Ente
                 det_data.append([
                     Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
                     "", "", "", "", "",
@@ -356,7 +352,7 @@ def genera_pdf_report(df_report):
                     ('BOTTOMPADDING', (0,0), (-1,-1), 4),
                     ('TOPPADDING', (0,0), (-1,-1), 4),
                     ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
-                    ('SPAN', (0, -1), (5, -1)), # Unisce le prime celle della riga del subtotale
+                    ('SPAN', (0, -1), (5, -1)),
                     ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f1f5f9')),
                 ]))
                 elements.append(t_det)
@@ -379,7 +375,7 @@ def genera_pdf_report(df_report):
     except Exception as e:
         return None
 
-# Funzione per ottenere il client gspread dai secrets di Streamlit
+# Funzione per ottenere il client gspread e il foglio Foglio1
 def get_gspread_client_and_sheet():
     try:
         import gspread
@@ -488,7 +484,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
 
-# Gestione configurazione tabelle
+# Gestione configurazione tabelle (con integrazione lettura/salvataggio su Foglio1)
 def carica_config():
     default_config = {
         "enti": ["Scuola Radio Elettra", "Scuola Bufalini", "Commercialista", "Personale"],
@@ -496,6 +492,31 @@ def carica_config():
         "sedi": ["Sede Centrale", "Succursale", "Smart Working"],
         "modalita": ["Presenza", "Videolezione"],
     }
+    
+    # 1. Prova a caricare dal Foglio1 di Google Sheets
+    try:
+        worksheet = get_gspread_client_and_sheet()
+        if worksheet:
+            all_vals = worksheet.get_all_values()
+            if len(all_vals) >= 29:
+                config_from_sheet = {"enti": [], "classi": [], "sedi": [], "modalita": []}
+                # Legge le prime righe di opzioni (es. righe 3..25)
+                for r in all_vals[2:25]:
+                    if len(r) > 0 and r[0].strip(): config_from_sheet["enti"].append(r[0].strip())
+                    if len(r) > 1 and r[1].strip(): config_from_sheet["classi"].append(r[1].strip())
+                    if len(r) > 2 and r[2].strip(): config_from_sheet["sedi"].append(r[2].strip())
+                    if len(r) > 3 and r[3].strip(): config_from_sheet["modalita"].append(r[3].strip())
+                
+                # Rimuove le intestazioni di tabella se presenti nelle liste lette
+                for k in config_from_sheet:
+                    config_from_sheet[k] = [x for x in config_from_sheet[k] if str(x).lower() not in ["enti", "classi", "sedi", "modalità", "modalita"]]
+                
+                if any(config_from_sheet.values()):
+                    return config_from_sheet
+    except Exception:
+        pass
+
+    # 2. Fallback su file locale config_tabelle.json
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
@@ -513,12 +534,36 @@ def carica_config():
     return default_config
 
 def salva_config(config):
+    # Salvataggio su file JSON locale
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f)
+        
+    # Salvataggio integrato nelle tabelle dinamiche di Foglio1
+    try:
+        worksheet = get_gspread_client_and_sheet()
+        if worksheet:
+            # Pulisce l'area delle opzioni (righe 1..25, colonne A..D)
+            worksheet.batch_clear(["A1:D25"])
+            
+            headers = ["Enti", "Classi", "Sedi", "Modalità"]
+            max_len = max(len(config.get("enti", [])), len(config.get("classi", [])), len(config.get("sedi", [])), len(config.get("modalita", [])))
+            
+            matrix = [headers]
+            for i in range(max_len):
+                row = [
+                    config["enti"][i] if i < len(config["enti"]) else "",
+                    config["classi"][i] if i < len(config["classi"]) else "",
+                    config["sedi"][i] if i < len(config["sedi"]) else "",
+                    config["modalita"][i] if i < len(config["modalita"]) else ""
+                ]
+                matrix.append(row)
+            worksheet.update("A1", matrix)
+    except Exception as e:
+        pass
 
 config = carica_config()
 
-# Caricamento dati da Google Sheets
+# Caricamento dati da Google Sheets (foglio unico Foglio1)
 def carica_dati():
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
@@ -526,10 +571,22 @@ def carica_dati():
         worksheet = get_gspread_client_and_sheet()
         if worksheet is None:
             return empty_df
-        data = worksheet.get_all_records()
-        if not data:
+        
+        all_vals = worksheet.get_all_values()
+        if not all_vals:
             return empty_df
-        df = pd.DataFrame(data)
+            
+        # Se Foglio1 contiene la struttura a blocchi con tabelle nelle prime righe, i dati partono dalla riga 29 (A29:N29)
+        if len(all_vals) >= 29 and any(all_vals[28]):
+            header = all_vals[28]
+            rows = all_vals[29:]
+            df = pd.DataFrame(rows, columns=header)
+        else:
+            # Fallback per fogli con struttura dati standard dalla riga 1
+            data = worksheet.get_all_records()
+            if not data:
+                return empty_df
+            df = pd.DataFrame(data)
         
         if "Committente" in df.columns and "Classe" not in df.columns:
             df = df.rename(columns={"Committente": "Classe"})
@@ -576,7 +633,7 @@ def carica_dati():
     except Exception as e:
         return empty_df
 
-# Salvataggio dati su Google Sheets
+# Salvataggio dati su Google Sheets (nel foglio unico Foglio1)
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
@@ -591,9 +648,18 @@ def salva_dati(df_to_save):
         if worksheet is None:
             st.error("Impossibile connettersi a Google Sheets. Verifica i Secrets.")
             return
-        worksheet.clear()
-        righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-        worksheet.update("A1", righe)
+            
+        all_vals = worksheet.get_all_values()
+        
+        # Se le tabelle opzioni occupano le prime righe, posiziona l'archivio attività dalla riga 29
+        if len(all_vals) >= 28:
+            worksheet.batch_clear(["A29:N1000"])
+            righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+            worksheet.update("A29", righe)
+        else:
+            worksheet.clear()
+            righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+            worksheet.update("A1", righe)
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
@@ -1158,7 +1224,6 @@ with tab3:
             else:
                 df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
 
-        # Escludi dal conteggio del report le righe flaggate
         ore_totali = df_report[df_report["Escludi_Conteggio"] != True]["Ore"].sum()
 
         st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività trovate | **Totale Ore Report (escluse quelle flaggate):** **{ore_totali:.2f} ore**")
