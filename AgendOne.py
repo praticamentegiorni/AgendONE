@@ -1005,21 +1005,9 @@ with tab3:
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
 
-        def colora_righe_tabella(row):
-            svolto = row.get("Svolto", False)
-            if svolto:
-                return ['background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'] * len(row)
-            mod = str(row.get("Modalità", "")).lower()
-            if "presenza" in mod:
-                return ['background-color: #1c3d73; color: #ffffff'] * len(row)
-            elif "video" in mod:
-                return ['background-color: #155c32; color: #ffffff'] * len(row)
-            return [''] * len(row)
-
-        df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
-
+        # Nota: st_data_editor non supporta oggetti Styler di Pandas; passiamo direttamente df_mostra
         df_editato = st.data_editor(
-            df_styled,
+            df_mostra,
             use_container_width=True,
             hide_index=True,
             column_config={
