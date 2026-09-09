@@ -19,7 +19,7 @@ st.markdown(
         background-color: #1e293b !important;
         color: #f8fafc !important;
         padding: 12px 24px !important;
-        border-radius: 8px !important; /* Arrotondati su tutti i lati per sembrare bottoni */
+        border-radius: 8px !important;
         margin-right: 10px !important;
         border: 1px solid #334155 !important;
         transition: all 0.2s ease-in-out !important;
@@ -92,48 +92,6 @@ st.markdown(
         line-height: 1.6 !important;
     }
 
-    /* Pulsanti Frecce Moderni Carousel */
-    .nav-btn {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: #1e293b;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 10;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .nav-btn:hover {
-      background: #ffffff;
-      transform: translateY(-50%) scale(1.1);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-      color: #2563eb;
-    }
-
-    .nav-btn-prev { left: 16px; }
-    .nav-btn-next { right: 16px; }
-
-    .nav-btn svg {
-      width: 24px;
-      height: 24px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.5;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    /* Banner Popup Ingrandito */
     .preview-banner {
       position: absolute;
       bottom: 24px;
@@ -157,19 +115,6 @@ st.markdown(
       opacity: 1;
       visibility: visible;
       transform: translateX(-50%) translateY(0);
-    }
-
-    .preview-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin: 0 0 8px 0;
-    }
-
-    .preview-description {
-      font-size: 1.0rem;
-      color: #64748b;
-      margin: 0;
     }
     </style>
     """,
@@ -267,7 +212,6 @@ def genera_pdf_report(df_report):
         td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
-        # Nuovi stili per i totali parziali della classe (Testo in Blu)
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
         style_subtot_val_classe = ParagraphStyle('SubTotValClasse', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
 
@@ -304,7 +248,6 @@ def genera_pdf_report(df_report):
         elements.append(Spacer(1, 4))
         
         if not df_report.empty:
-            # Raggruppamento per Ente e poi per Classe
             gruppi_ente_classe = defaultdict(lambda: defaultdict(list))
             for _, row in df_report.iterrows():
                 e_nome = str(row.get("Ente", "")).strip()
@@ -343,7 +286,7 @@ def genera_pdf_report(df_report):
                 ]
                 
                 totale_ore_ente = 0.0
-                row_idx = 1 # Contatore per calcolare dinamicamente gli SPAN sulle righe
+                row_idx = 1
                 
                 for classe_nome, lista_attivita in classi_dict.items():
                     totale_ore_classe = 0.0
@@ -376,19 +319,15 @@ def genera_pdf_report(df_report):
                         ])
                         row_idx += 1
                     
-                    # --- Riga del Parziale CLASSE in Blu ---
                     det_data.append([
                         Paragraph(f"<b>Totale parziale ({classe_nome}):</b>", style_subtot_classe),
                         "", "", "", "", "",
                         Paragraph(f"<b>{totale_ore_classe:.2f}h</b>", style_subtot_val_classe)
                     ])
-                    # Unisco le celle da colonna 0 a 5 sulla riga corrente
                     table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
-                    # Aggiungo un leggerissimo sfondo celeste per la riga della classe
                     table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
                     row_idx += 1
 
-                # --- Riga Totale ENTE ---
                 det_data.append([
                     Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
                     "", "", "", "", "",
@@ -449,7 +388,7 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar
+# Funzione per sincronizzare l'evento su Google Calendar con Orario ben visibile nel titolo
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
@@ -487,10 +426,13 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
+            # Inserito l'orario affianco ai codici e alla classe nel titolo
+            titolo_evento = f"[{dati_evento['Orario Inizio']}-{dati_evento['Orario Fine']}] [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})"
+
             body = {
-                'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
+                'summary': titolo_evento,
                 'location': str(dati_evento['Sede']),
-                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento['Note']}\nGestito da AgendOne",
+                'description': f"Orario: {dati_evento['Orario Inizio']} - {dati_evento['Orario Fine']}\nEnte: {dati_evento.get('Ente', '')}\nClasse: {dati_evento['Classe']}\nNote: {dati_evento['Note']}\nGestito da AgendOne",
                 'start': {
                     'dateTime': start_datetime,
                     'timeZone': 'Europe/Rome',
@@ -607,7 +549,7 @@ def salva_config(config):
 
 config = carica_config()
 
-# Caricamento dati da Google Sheets (da Foglio1)
+# Caricamento dati da Google Sheets (da Foglio1) - Preserva tutti i dati
 def carica_dati():
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
@@ -655,8 +597,8 @@ def carica_dati():
         else:
             df["Reminder_Minuti"] = pd.to_numeric(df["Reminder_Minuti"], errors="coerce").fillna(240).astype(int)
             
-        if "Ore" not in df.columns or df["Ore"].isna().all():
-            df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
+        # Calcolo rigoroso del criterio ore
+        df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
             
         for c in cols_standard:
             if c not in df.columns:
@@ -666,7 +608,7 @@ def carica_dati():
     except Exception as e:
         return empty_df
 
-# Salvataggio dati su Google Sheets (su Foglio1)
+# Salvataggio dati su Google Sheets (su Foglio1) - Mantiene integre le righe preesistenti
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
@@ -700,25 +642,50 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "Calendario",
 ])
 
-opzioni_promemoria = {
-    "15 minuti prima": 15,
-    "30 minuti prima": 30,
-    "1 ora prima": 60,
-    "2 ore prima": 120,
-    "4 ore prima": 240,
-    "1 giorno prima": 1440
-}
-
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
     st.subheader("Registrazione Nuova Attività")
+    
+    # Flag Opzionale per attivare l'inserimento multiplo (Default: Disattivato / Inserimento Normale)
+    inserimento_multiplo = st.checkbox("Attiva Inserimento Multiplo (più giornate contemporaneamente)", value=False)
+    
     with st.form("form_orario", clear_on_submit=True):
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            data_selezionata = st.date_input("Giorno", value=datetime.date.today(), format="DD/MM/YYYY")
-            mese_str = traduci_mese(data_selezionata.strftime("%B"))
-        with col_d2:
-            st.info(f"Mese di riferimento: **{mese_str}**")
+        if inserimento_multiplo:
+            st.markdown("##### Modalità Inserimento Multiplo Attiva")
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                range_date = st.date_input("Seleziona Intervallo Date (Inizio e Fine)", value=(datetime.date.today(), datetime.date.today()), format="DD/MM/YYYY")
+            with col_m2:
+                giorni_selezionati = st.multiselect(
+                    "Filtra Giorni della Settimana", 
+                    options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"],
+                    default=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+                )
+            
+            mappa_giorni = {0: "Lunedì", 1: "Martedì", 2: "Mercoledì", 3: "Giovedì", 4: "Venerdì", 5: "Sabato", 6: "Domenica"}
+            date_da_processare = []
+            
+            if isinstance(range_date, (tuple, list)) and len(range_date) == 2:
+                d_start, d_end = range_date
+                cur_d = d_start
+                while cur_d <= d_end:
+                    if mappa_giorni[cur_d.weekday()] in giorni_selezionati:
+                        date_da_processare.append(cur_d)
+                    cur_d += datetime.timedelta(days=1)
+            elif isinstance(range_date, (tuple, list)) and len(range_date) == 1:
+                date_da_processare = [range_date[0]]
+            else:
+                date_da_processare = [range_date]
+            
+            st.info(f"Verranno creati **{len(date_da_processare)}** appuntamenti distinti con i medesimi dettagli.")
+        else:
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                data_selezionata = st.date_input("Giorno", value=datetime.date.today(), format="DD/MM/YYYY")
+                mese_str = traduci_mese(data_selezionata.strftime("%B"))
+                date_da_processare = [data_selezionata]
+            with col_d2:
+                st.info(f"Mese di riferimento: **{mese_str}**")
 
         st.markdown("**Selezione Orario**")
         col_o1, col_o2, col_o3, col_o4 = st.columns(4)
@@ -735,7 +702,7 @@ with tab1:
         orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
         ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
 
-        st.caption(f"Durata stimata: **{ore_calcolate} ore**")
+        st.caption(f"Durata per singola sessione: **{ore_calcolate} ore**")
 
         col_t0, col_t1, col_t2, col_t3 = st.columns(4)
         
@@ -757,10 +724,7 @@ with tab1:
             modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-        st.selectbox("Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
-        st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
         minuti_scelti = 240
-
         svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
         escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
@@ -770,6 +734,8 @@ with tab1:
         if submit_button:
             if orario_inizio_str >= orario_fine_str:
                 st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
+            elif not date_da_processare:
+                st.error("Nessuna data valida selezionata per l'inserimento.")
             else:
                 val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
                 val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
@@ -786,40 +752,44 @@ with tab1:
                     config["modalita"].append(nuovo_mod_libero)
                 salva_config(config)
 
-                dati_evento = {
-                    "Data": data_selezionata.strftime("%Y-%m-%d"),
-                    "Orario Inizio": orario_inizio_str,
-                    "Orario Fine": orario_fine_str,
-                    "Ente": val_ente,
-                    "Classe": val_classe,
-                    "Sede": val_sede,
-                    "Modalità": val_modalita,
-                    "Note": note,
-                    "Reminder_Minuti": minuti_scelti
-                }
-                
-                cal_id = sincronizza_google_calendar("crea", dati_evento)
+                nuovi_eventi = []
+                for d_curr in date_da_processare:
+                    m_curr_str = traduci_mese(d_curr.strftime("%B"))
+                    dati_evento = {
+                        "Data": d_curr.strftime("%Y-%m-%d"),
+                        "Orario Inizio": orario_inizio_str,
+                        "Orario Fine": orario_fine_str,
+                        "Ente": val_ente,
+                        "Classe": val_classe,
+                        "Sede": val_sede,
+                        "Modalità": val_modalita,
+                        "Note": note,
+                        "Reminder_Minuti": minuti_scelti
+                    }
+                    
+                    cal_id = sincronizza_google_calendar("crea", dati_evento)
 
-                nuovo_dato = pd.DataFrame({
-                    "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                    "Mese": [mese_str],
-                    "Orario Inizio": [orario_inizio_str],
-                    "Orario Fine": [orario_fine_str],
-                    "Ore": [ore_calcolate],
-                    "Ente": [val_ente],
-                    "Classe": [val_classe],
-                    "Sede": [val_sede],
-                    "Modalità": [val_modalita],
-                    "Svolto": [svolto_iniziale],
-                    "Escludi_Conteggio": [escludi_conteggio_iniziale],
-                    "Note": [note],
-                    "Calendar_ID": [str(cal_id) if cal_id else ""],
-                    "Reminder_Minuti": [minuti_scelti]
-                })
+                    nuovi_eventi.append({
+                        "Data": d_curr.strftime("%Y-%m-%d"),
+                        "Mese": m_curr_str,
+                        "Orario Inizio": orario_inizio_str,
+                        "Orario Fine": orario_fine_str,
+                        "Ore": ore_calcolate,
+                        "Ente": val_ente,
+                        "Classe": val_classe,
+                        "Sede": val_sede,
+                        "Modalità": val_modalita,
+                        "Svolto": svolto_iniziale,
+                        "Escludi_Conteggio": escludi_conteggio_iniziale,
+                        "Note": note,
+                        "Calendar_ID": str(cal_id) if cal_id else "",
+                        "Reminder_Minuti": minuti_scelti
+                    })
 
-                df = pd.concat([df, nuovo_dato], ignore_index=True)
+                df_nuovi = pd.DataFrame(nuovi_eventi)
+                df = pd.concat([df, df_nuovi], ignore_index=True)
                 salva_dati(df)
-                st.success("Attività salvata e sincronizzata con Google Calendar!")
+                st.success(f"{len(nuovi_eventi)} Attività salvata/e e sincronizzata/e con successo con Google Calendar!")
                 st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
@@ -1105,9 +1075,6 @@ with tab3:
                 mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
                 attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
-                
-                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
-                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
                 minuti_scelti_mod = attuale_minuti
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
