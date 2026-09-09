@@ -1,7 +1,9 @@
+import calendar
 import datetime
 import io
 import json
 import os
+import time
 import pandas as pd
 import streamlit as st
 
@@ -310,28 +312,30 @@ def genera_pdf_report(df_report):
     except Exception as e:
         return None
 
-# Funzione per ottenere il client gspread e il foglio desiderato
+# Caching della connessione Client gspread
+@st.cache_resource
+def get_gspread_client():
+    import gspread
+    gsheets_secrets = st.secrets["connections"]["gsheets"]
+    creds_dict = {
+        "type": gsheets_secrets.get("type", "service_account"),
+        "project_id": gsheets_secrets.get("project_id"),
+        "private_key_id": gsheets_secrets.get("private_key_id"),
+        "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
+        "client_email": gsheets_secrets.get("client_email"),
+        "client_id": gsheets_secrets.get("client_id"),
+        "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+        "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+        "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+        "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
+        "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
+    }
+    return gspread.service_account_from_dict(creds_dict)
+
 def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
     try:
-        import gspread
-        gsheets_secrets = st.secrets["connections"]["gsheets"]
-        spreadsheet_url = gsheets_secrets["spreadsheet"]
-        
-        creds_dict = {
-            "type": gsheets_secrets.get("type", "service_account"),
-            "project_id": gsheets_secrets.get("project_id"),
-            "private_key_id": gsheets_secrets.get("private_key_id"),
-            "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
-            "client_email": gsheets_secrets.get("client_email"),
-            "client_id": gsheets_secrets.get("client_id"),
-            "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-            "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
-            "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
-            "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
-            "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
-        }
-        
-        client = gspread.service_account_from_dict(creds_dict)
+        client = get_gspread_client()
+        spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
         spreadsheet = client.open_by_url(spreadsheet_url)
         worksheet = spreadsheet.worksheet(nome_foglio)
         return worksheet
@@ -421,7 +425,8 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
 
-# Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
+# Gestione configurazione tabelle con Caching
+@st.cache_data(ttl=300)
 def carica_config():
     default_config = {
         "enti": [],
@@ -492,12 +497,14 @@ def salva_config(config):
         
         worksheet.clear()
         worksheet.update("A1", rows)
+        st.cache_data.clear() # Svuota la cache dopo la modifica
     except Exception as e:
         st.error(f"Errore durante il salvataggio nel foglio 'Tabelle': {e}")
 
 config = carica_config()
 
-# Caricamento dati da Google Sheets (da Foglio1)
+# Caricamento dati da Google Sheets (da Foglio1) con Caching
+@st.cache_data(ttl=300)
 def carica_dati():
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
@@ -575,6 +582,7 @@ def salva_dati(df_to_save):
         worksheet.clear()
         righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         worksheet.update("A1", righe)
+        st.cache_data.clear() # Svuota la cache dopo il salvataggio
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
@@ -1485,7 +1493,6 @@ with tab4:
         unsafe_allow_html=True
     )
 
-    import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
 
