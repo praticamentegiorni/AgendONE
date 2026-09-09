@@ -1,9 +1,7 @@
-import calendar
 import datetime
 import io
 import json
 import os
-import time
 import pandas as pd
 import streamlit as st
 
@@ -88,6 +86,18 @@ MESI_ITALIANI = {
     "October": "Ottobre",
     "November": "Novembre",
     "December": "Dicembre",
+}
+
+# Opzioni promemoria Google Calendar (etichetta -> minuti)
+OPZIONI_PROMEMORIA = {
+    "Nessun promemoria": 0,
+    "15 minuti prima": 15,
+    "30 minuti prima": 30,
+    "1 ora prima": 60,
+    "2 ore prima": 120,
+    "4 ore prima (Default)": 240,
+    "1 giorno prima": 1440,
+    "2 giorni prima": 2880
 }
 
 def traduci_mese(mese_en):
@@ -312,30 +322,28 @@ def genera_pdf_report(df_report):
     except Exception as e:
         return None
 
-# Caching della connessione Client gspread
-@st.cache_resource
-def get_gspread_client():
-    import gspread
-    gsheets_secrets = st.secrets["connections"]["gsheets"]
-    creds_dict = {
-        "type": gsheets_secrets.get("type", "service_account"),
-        "project_id": gsheets_secrets.get("project_id"),
-        "private_key_id": gsheets_secrets.get("private_key_id"),
-        "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
-        "client_email": gsheets_secrets.get("client_email"),
-        "client_id": gsheets_secrets.get("client_id"),
-        "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-        "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
-        "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
-        "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
-        "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
-    }
-    return gspread.service_account_from_dict(creds_dict)
-
+# Funzione per ottenere il client gspread e il foglio desiderato
 def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
     try:
-        client = get_gspread_client()
-        spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        import gspread
+        gsheets_secrets = st.secrets["connections"]["gsheets"]
+        spreadsheet_url = gsheets_secrets["spreadsheet"]
+        
+        creds_dict = {
+            "type": gsheets_secrets.get("type", "service_account"),
+            "project_id": gsheets_secrets.get("project_id"),
+            "private_key_id": gsheets_secrets.get("private_key_id"),
+            "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
+            "client_email": gsheets_secrets.get("client_email"),
+            "client_id": gsheets_secrets.get("client_id"),
+            "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
+            "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
+        }
+        
+        client = gspread.service_account_from_dict(creds_dict)
         spreadsheet = client.open_by_url(spreadsheet_url)
         worksheet = spreadsheet.worksheet(nome_foglio)
         return worksheet
@@ -381,6 +389,19 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
+            reminder_min = dati_evento.get("Reminder_Minuti", 240)
+            if reminder_min is not None and str(reminder_min).isdigit() and int(reminder_min) >= 0:
+                rem_val = int(reminder_min)
+                if rem_val == 0:
+                    reminders_body = {'useDefault': False, 'overrides': []}
+                else:
+                    reminders_body = {
+                        'useDefault': False,
+                        'overrides': [{'method': 'popup', 'minutes': rem_val}]
+                    }
+            else:
+                reminders_body = {'useDefault': True}
+
             body = {
                 'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
@@ -393,9 +414,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'dateTime': end_datetime,
                     'timeZone': 'Europe/Rome',
                 },
-                'reminders': {
-                    'useDefault': True,
-                },
+                'reminders': reminders_body,
             }
 
         if azione == "crea":
@@ -425,8 +444,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
 
-# Gestione configurazione tabelle con Caching
-@st.cache_data(ttl=300)
+# Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
 def carica_config():
     default_config = {
         "enti": [],
@@ -497,14 +515,12 @@ def salva_config(config):
         
         worksheet.clear()
         worksheet.update("A1", rows)
-        st.cache_data.clear() # Svuota la cache dopo la modifica
     except Exception as e:
         st.error(f"Errore durante il salvataggio nel foglio 'Tabelle': {e}")
 
 config = carica_config()
 
-# Caricamento dati da Google Sheets (da Foglio1) con Caching
-@st.cache_data(ttl=300)
+# Caricamento dati da Google Sheets (da Foglio1)
 def carica_dati():
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
@@ -582,7 +598,6 @@ def salva_dati(df_to_save):
         worksheet.clear()
         righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         worksheet.update("A1", righe)
-        st.cache_data.clear() # Svuota la cache dopo il salvataggio
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
@@ -601,6 +616,8 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # Inizializzazione session_state per inserimenti multipli
 if "lista_sessioni_temp" not in st.session_state:
     st.session_state["lista_sessioni_temp"] = []
+
+opzioni_prom_keys = list(OPZIONI_PROMEMORIA.keys())
 
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
@@ -655,6 +672,9 @@ with tab1:
                 modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
                 nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
+            prom_scelto_lbl = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=5, key="singolo_prom")
+            minuti_prom_singolo = OPZIONI_PROMEMORIA[prom_scelto_lbl]
+
             svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
             escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
             note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
@@ -689,7 +709,7 @@ with tab1:
                         "Sede": val_sede,
                         "Modalità": val_modalita,
                         "Note": note,
-                        "Reminder_Minuti": 240
+                        "Reminder_Minuti": minuti_prom_singolo
                     }
                     
                     cal_id = sincronizza_google_calendar("crea", dati_evento)
@@ -708,7 +728,7 @@ with tab1:
                         "Escludi_Conteggio": [escludi_conteggio_iniziale],
                         "Note": [note],
                         "Calendar_ID": [str(cal_id) if cal_id else ""],
-                        "Reminder_Minuti": [240]
+                        "Reminder_Minuti": [minuti_prom_singolo]
                     })
 
                     df = pd.concat([df, nuovo_dato], ignore_index=True)
@@ -742,6 +762,9 @@ with tab1:
         with col_mt3:
             modalita_m = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="m_sel_mod")
             nuovo_mod_libero_m = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="m_lib_mod")
+
+        prom_scelto_lbl_m = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=5, key="multi_prom")
+        minuti_prom_m = OPZIONI_PROMEMORIA[prom_scelto_lbl_m]
 
         col_mc1, col_mc2 = st.columns(2)
         with col_mc1:
@@ -835,7 +858,7 @@ with tab1:
                             "Sede": val_sede_m,
                             "Modalità": val_modalita_m,
                             "Note": note_m,
-                            "Reminder_Minuti": 240
+                            "Reminder_Minuti": minuti_prom_m
                         }
                         
                         cal_id = sincronizza_google_calendar("crea", dati_evento)
@@ -854,7 +877,7 @@ with tab1:
                             "Escludi_Conteggio": escludi_m,
                             "Note": note_m,
                             "Calendar_ID": str(cal_id) if cal_id else "",
-                            "Reminder_Minuti": 240
+                            "Reminder_Minuti": minuti_prom_m
                         })
 
                     salva_config(config)
@@ -1146,11 +1169,15 @@ with tab3:
                 mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
                 mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
-                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
-                
-                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
-                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
-                minuti_scelti_mod = attuale_minuti
+                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240)) if pd.notnull(riga_corrente.get("Reminder_Minuti")) else 240
+                idx_prom_def = 5
+                for idx_p, (lbl_p, min_p) in enumerate(OPZIONI_PROMEMORIA.items()):
+                    if min_p == attuale_minuti:
+                        idx_prom_def = idx_p
+                        break
+
+                prom_scelto_mod_lbl = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=idx_prom_def, key="mod_prom")
+                minuti_scelti_mod = OPZIONI_PROMEMORIA[prom_scelto_mod_lbl]
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
@@ -1493,6 +1520,7 @@ with tab4:
         unsafe_allow_html=True
     )
 
+    import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
 
