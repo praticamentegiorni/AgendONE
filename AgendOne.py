@@ -443,7 +443,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     except Exception as e:
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
-        st.error(f"Errore Calendar: {e}")
 # Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
 def carica_config():
     default_config = {
