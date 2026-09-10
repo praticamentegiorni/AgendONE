@@ -1153,9 +1153,58 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
                 
-                # Modifica del testo inserito per il multi-impegno
+                # Modifica del testo inserito per il multi-impegno: se è un appuntamento multiplo, mostra le 8 righe, altrimenti la visualizzazione normale (singolo campo)
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
-                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+                is_multiplo = bool(attuale_appunto_multiplo.strip())
+
+                if is_multiplo:
+                    st.markdown("---")
+                    st.markdown("### Sezione 8 Appuntamenti Multipli (Modifica)")
+                    st.caption("Modifica le righe dell'appuntamento multiplo.")
+                    
+                    parsed_righe = []
+                    for line in attuale_appunto_multiplo.split("\n"):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            parts = line.split(" ", 1)
+                            time_range = parts[0]
+                            text = parts[1] if len(parts) > 1 else ""
+                            t_parts = time_range.split("-")
+                            start_t = t_parts[0]
+                            end_t = t_parts[1]
+                            hi, mi = map(int, start_t.split(":"))
+                            hf, mf = map(int, end_t.split(":"))
+                            parsed_righe.append((hi, mi, hf, mf, text))
+                        except Exception:
+                            parsed_righe.append((9, 0, 10, 0, line))
+
+                    mod_righe_multiplo_lista = []
+                    for i in range(8):
+                        default_hi, default_mi, default_hf, default_mf, default_testo = (9, 0, 10, 0, "")
+                        if i < len(parsed_righe):
+                            default_hi, default_mi, default_hf, default_mf, default_testo = parsed_righe[i]
+
+                        rc1, rc2, rc3, rc4, rc5 = st.columns([0.45, 0.45, 0.45, 0.45, 4.2])
+                        with rc1:
+                            m_ora_i = st.selectbox(f"ModDaO{i+1}", options=list(range(0, 24)), index=default_hi if default_hi in range(0, 24) else 0, key=f"mod_m_ora_i_{i}", label_visibility="collapsed")
+                        with rc2:
+                            m_min_i = st.selectbox(f"ModDaM{i+1}", options=list(range(0, 60)), index=default_mi if default_mi in range(0, 60) else 0, key=f"mod_m_min_i_{i}", label_visibility="collapsed")
+                        with rc3:
+                            m_ora_f = st.selectbox(f"ModAO{i+1}", options=list(range(0, 24)), index=default_hf if default_hf in range(0, 24) else 1, key=f"mod_m_ora_f_{i}", label_visibility="collapsed")
+                        with rc4:
+                            m_min_f = st.selectbox(f"ModAM{i+1}", options=list(range(0, 60)), index=default_mf if default_mf in range(0, 60) else 0, key=f"mod_m_min_f_{i}", label_visibility="collapsed")
+                        with rc5:
+                            m_testo = st.text_input(f"ModTesto {i+1}", value=default_testo, placeholder=f"Testo appuntamento {i+1}...", key=f"mod_m_testo_{i}", label_visibility="collapsed")
+                        
+                        if m_testo.strip():
+                            orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
+                            mod_righe_multiplo_lista.append(f"{orario_slot_str} {m_testo.strip()}")
+                    
+                    mod_appunto_multiplo = "\n".join(mod_righe_multiplo_lista)
+                else:
+                    mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
                     if mod_orario_i_str >= mod_orario_f_str:
