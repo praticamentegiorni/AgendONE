@@ -277,7 +277,6 @@ def genera_pdf_report(df_report):
         td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
-        # Stili per i totali parziali della classe (Testo in Blu)
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
         style_subtot_val_classe = ParagraphStyle('SubTotValClasse', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
 
@@ -453,7 +452,7 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
     except Exception as e:
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar (Invariata)
+# Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
@@ -610,7 +609,7 @@ def salva_config(config):
 
 config = carica_config()
 
-# Caricamento dati da Google Sheets (da Foglio1) - inclusa Colonna O "Codice"
+# Caricamento dati da Google Sheets (da Foglio1)
 def carica_dati():
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti", "Codice"]
     empty_df = pd.DataFrame(columns=cols_standard)
@@ -916,9 +915,8 @@ with tab1:
                     st.rerun()
 
     else:
-        # Inserimento Multiplo Classi (Multi-Impegno)
-        if "classi_multi_list" not in st.session_state:
-            st.session_state["classi_multi_list"] = []
+        # Inserimento Multiplo Classi (Multi-Impegno) - Inserimento una classe alla volta
+        st.info("💡 **Modalità Inserimento Sequenziale**: Imposta l'Ente Principale, la Sede e la Modalità. Saranno conservati per consentirti di inserire e salvare le singole classi una alla volta per lo stesso Ente.")
 
         col_d1, col_d2 = st.columns(2)
         with col_d1:
@@ -944,164 +942,116 @@ with tab1:
             nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="multi_lib_mod")
 
         st.markdown("---")
-        st.markdown("#### 2. Inserimento Classi e Orari")
-        
-        col_c1, col_c2, col_c3, col_c4 = st.columns([3, 2, 2, 2])
-        opts_classi = config.get("classi", []).copy()
+        st.markdown("#### 2. Dettagli della Singola Classe da Salvare")
 
-        with col_c1:
-            cls_sel = st.selectbox("Classe", options=opts_classi if opts_classi else [""], key="multi_cls_sel")
-            cls_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="multi_cls_libera")
-        with col_c2:
-            ora_i_m = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9, key="multi_ora_i")
-            min_i_m = st.selectbox("Min Inizio", options=list(range(0, 60)), index=0, key="multi_min_i")
-        with col_c3:
-            ora_f_m = st.selectbox("Ora Fine", options=list(range(0, 24)), index=11, key="multi_ora_f")
-            min_f_m = st.selectbox("Min Fine", options=list(range(0, 60)), index=0, key="multi_min_f")
-        with col_c4:
-            st.write("")
-            st.write("")
-            btn_add_cls = st.button("➕ Aggiungi Classe", use_container_width=True)
+        with st.form("form_multi_singola_classe", clear_on_submit=False):
+            opts_classi = config.get("classi", []).copy()
 
-        if btn_add_cls:
-            val_cls = cls_libera.strip() if cls_libera else cls_sel
-            str_i = f"{ora_i_m:02d}:{min_i_m:02d}"
-            str_f = f"{ora_f_m:02d}:{min_f_m:02d}"
-            if not val_cls:
-                st.error("Seleziona o digita il nome della classe.")
-            elif str_i >= str_f:
-                st.error("L'orario di inizio deve essere precedente all'orario di fine.")
-            else:
-                ore_c = calcola_ore(str_i, str_f)
-                st.session_state["classi_multi_list"].append({
-                    "Classe": val_cls,
-                    "Orario Inizio": str_i,
-                    "Orario Fine": str_f,
-                    "Ore": ore_c
-                })
-                if cls_libera and cls_libera not in config["classi"]:
-                    config["classi"].append(cls_libera)
-                    salva_config(config)
-                st.success(f"Classe {val_cls} ({str_i} - {str_f}) aggiunta con successo!")
-                st.rerun()
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                cls_sel = st.selectbox("Classe", options=opts_classi if opts_classi else [""], key="multi_cls_sel")
+                cls_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="multi_cls_libera")
 
-        if st.session_state["classi_multi_list"]:
-            st.markdown("**Elenco classi inserite per questo impegno:**")
-            
-            classi_list = st.session_state["classi_multi_list"]
-            ora_inizio_minima = min(c["Orario Inizio"] for c in classi_list)
-            ora_fine_massima = max(c["Orario Fine"] for c in classi_list)
-            totale_ore_multi = sum(c["Ore"] for c in classi_list)
+            with col_c2:
+                st.markdown("**Orario Lezione / Impegno**")
+                col_o1, col_o2, col_o3, col_o4 = st.columns(4)
+                with col_o1:
+                    ora_i_m = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9, key="multi_ora_i")
+                with col_o2:
+                    min_i_m = st.selectbox("Min Inizio", options=list(range(0, 60)), index=0, key="multi_min_i")
+                with col_o3:
+                    ora_f_m = st.selectbox("Ora Fine", options=list(range(0, 24)), index=11, key="multi_ora_f")
+                with col_o4:
+                    min_f_m = st.selectbox("Min Fine", options=list(range(0, 60)), index=0, key="multi_min_f")
 
-            for idx_c, item in enumerate(classi_list):
-                c_r1, c_r2, c_r3, c_r4, c_r5 = st.columns([3, 2, 2, 2, 1])
-                with c_r1:
-                    st.write(f"**Classe:** {item['Classe']}")
-                with c_r2:
-                    st.write(f"**Orario Inizio:** {item['Orario Inizio']}")
-                with c_r3:
-                    st.write(f"**Orario Fine:** {item['Orario Fine']}")
-                with c_r4:
-                    st.write(f"**Ore:** {item['Ore']:.2f} h")
-                with c_r5:
-                    if st.button("🗑️", key=f"del_cls_{idx_c}"):
-                        st.session_state["classi_multi_list"].pop(idx_c)
-                        st.rerun()
+            orario_i_str = f"{ora_i_m:02d}:{min_i_m:02d}"
+            orario_f_str = f"{ora_f_m:02d}:{min_f_m:02d}"
+            ore_calc = calcola_ore(orario_i_str, orario_f_str)
+            st.caption(f"Durata per questa classe: **{ore_calc} ore**")
 
-            st.info(f"📊 **Riepilogo Multi-Impegno Ente:** Inizio primo appuntamento: **{ora_inizio_minima}** | Fine ultimo appuntamento: **{ora_fine_massima}** | Somma Totale Ore Classi: **{totale_ore_multi:.2f} h**")
-        else:
-            st.warning("Nessuna classe inserita. Utilizza i campi sopra per aggiungere una o più classi con i relativi orari.")
+            col_opt1, col_opt2 = st.columns(2)
+            with col_opt1:
+                svolto_multi = st.checkbox("Impegno già svolto", value=False, key="multi_svolto")
+            with col_opt2:
+                escludi_multi = st.checkbox("Escludi dal conteggio ore", value=False, key="multi_escludi")
 
-        st.markdown("---")
-        st.markdown("#### 3. Salvataggio Finale Ente")
-        svolto_multi = st.checkbox("Impegno già svolto", value=False, key="multi_svolto")
-        escludi_multi = st.checkbox("Escludi dal conteggio ore", value=False, key="multi_escludi")
-        note_multi = st.text_area("Note / Descrizione generale", placeholder="Note aggiuntive per l'appuntamento...", key="multi_note")
+            note_multi = st.text_area("Note / Descrizione specifica classe", placeholder="Note relative a questa lezione...", key="multi_note")
 
-        btn_salva_multi = st.button("💾 Salva Inserimento Multiplo Ente", type="primary", use_container_width=True)
+            btn_salva_singola = st.form_submit_button("💾 Salva Classe per l'Ente", type="primary", use_container_width=True)
 
-        if btn_salva_multi:
-            if not st.session_state["classi_multi_list"]:
-                st.error("Aggiungi almeno una classe con il relativo orario prima di salvare!")
-            else:
+            if btn_salva_singola:
                 val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
                 val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
                 val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
+                val_classe = cls_libera.strip() if cls_libera else cls_sel
 
-                if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
-                    config["enti"].append(nuovo_ente_libero)
-                if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
-                    config["sedi"].append(nuova_sede_libera)
-                if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
-                    config["modalita"].append(nuovo_mod_libero)
-                salva_config(config)
+                if not val_classe:
+                    st.error("Seleziona o inserisci il nome della classe.")
+                elif orario_i_str >= orario_f_str:
+                    st.error("L'orario di inizio deve essere precedente all'orario di fine.")
+                else:
+                    if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
+                        config["enti"].append(nuovo_ente_libero)
+                    if cls_libera and cls_libera not in config["classi"]:
+                        config["classi"].append(cls_libera)
+                    if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
+                        config["sedi"].append(nuova_sede_libera)
+                    if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
+                        config["modalita"].append(nuovo_mod_libero)
+                    salva_config(config)
 
-                now_ts = datetime.datetime.now()
-                codice_univoco = f"{data_selezionata.strftime('%d%m%Y')}{now_ts.strftime('%H:%M:%S')}"
+                    now_ts = datetime.datetime.now()
+                    codice_univoco = f"{data_selezionata.strftime('%d%m%Y')}{now_ts.strftime('%H:%M:%S')}"
 
-                classi_list = st.session_state["classi_multi_list"]
-                ora_inizio_minima = min(c["Orario Inizio"] for c in classi_list)
-                ora_fine_massima = max(c["Orario Fine"] for c in classi_list)
-                totale_ore_multi = sum(c["Ore"] for c in classi_list)
-
-                str_classi_sommario = ", ".join([c["Classe"] for c in classi_list])
-                
-                dettaglio_classi_txt = "Dettaglio Classi ed Orari:\n" + "\n".join([f"- {c['Classe']}: {c['Orario Inizio']} - {c['Orario Fine']} ({c['Ore']:.2f}h)" for c in classi_list])
-                note_complete = f"{dettaglio_classi_txt}\n\nNote: {note_multi}".strip() if note_multi else dettaglio_classi_txt
-
-                dati_evento = {
-                    "Data": data_selezionata.strftime("%Y-%m-%d"),
-                    "Orario Inizio": ora_inizio_minima,
-                    "Orario Fine": ora_fine_massima,
-                    "Ente": val_ente,
-                    "Classe": str_classi_sommario,
-                    "Sede": val_sede,
-                    "Modalità": val_modalita,
-                    "Note": note_complete,
-                    "Reminder_Minuti": 240
-                }
-
-                cal_id = sincronizza_google_calendar("crea", dati_evento)
-
-                nuovo_dato = pd.DataFrame({
-                    "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                    "Mese": [mese_str],
-                    "Orario Inizio": [ora_inizio_minima],
-                    "Orario Fine": [ora_fine_massima],
-                    "Ore": [totale_ore_multi],
-                    "Ente": [val_ente],
-                    "Classe": [str_classi_sommario],
-                    "Sede": [val_sede],
-                    "Modalità": [val_modalita],
-                    "Svolto": [svolto_multi],
-                    "Escludi_Conteggio": [escludi_multi],
-                    "Note": [note_complete],
-                    "Calendar_ID": [str(cal_id) if cal_id else ""],
-                    "Reminder_Minuti": [240],
-                    "Codice": [codice_univoco]
-                })
-
-                df = pd.concat([df, nuovo_dato], ignore_index=True)
-                salva_dati(df)
-
-                # Salva tabella Multimpegno
-                df_m = carica_multimpegno()
-                nuove_righe_m = []
-                for item in classi_list:
-                    nuove_righe_m.append({
-                        "Classe": item["Classe"],
+                    dati_evento = {
                         "Data": data_selezionata.strftime("%Y-%m-%d"),
-                        "Orario Inizio": item["Orario Inizio"],
-                        "Orario Fine": item["Orario Fine"],
-                        "Ore": item["Ore"],
-                        "Codice": codice_univoco
-                    })
-                df_m = pd.concat([df_m, pd.DataFrame(nuove_righe_m)], ignore_index=True)
-                salva_multimpegno(df_m)
+                        "Orario Inizio": orario_i_str,
+                        "Orario Fine": orario_f_str,
+                        "Ente": val_ente,
+                        "Classe": val_classe,
+                        "Sede": val_sede,
+                        "Modalità": val_modalita,
+                        "Note": note_multi,
+                        "Reminder_Minuti": 240
+                    }
 
-                st.session_state["classi_multi_list"] = []
-                st.success(f"Inserimento multiplo per '{val_ente}' salvato con successo! Codice univoco: {codice_univoco}")
-                st.rerun()
+                    cal_id = sincronizza_google_calendar("crea", dati_evento)
+
+                    nuovo_dato = pd.DataFrame({
+                        "Data": [data_selezionata.strftime("%Y-%m-%d")],
+                        "Mese": [mese_str],
+                        "Orario Inizio": [orario_i_str],
+                        "Orario Fine": [orario_f_str],
+                        "Ore": [ore_calc],
+                        "Ente": [val_ente],
+                        "Classe": [val_classe],
+                        "Sede": [val_sede],
+                        "Modalità": [val_modalita],
+                        "Svolto": [svolto_multi],
+                        "Escludi_Conteggio": [escludi_multi],
+                        "Note": [note_multi],
+                        "Calendar_ID": [str(cal_id) if cal_id else ""],
+                        "Reminder_Minuti": [240],
+                        "Codice": [codice_univoco]
+                    })
+
+                    df = pd.concat([df, nuovo_dato], ignore_index=True)
+                    salva_dati(df)
+
+                    df_m = carica_multimpegno()
+                    nuova_m = pd.DataFrame([{
+                        "Classe": val_classe,
+                        "Data": data_selezionata.strftime("%Y-%m-%d"),
+                        "Orario Inizio": orario_i_str,
+                        "Orario Fine": orario_f_str,
+                        "Ore": ore_calc,
+                        "Codice": codice_univoco
+                    }])
+                    df_m = pd.concat([df_m, nuova_m], ignore_index=True)
+                    salva_multimpegno(df_m)
+
+                    st.success(f"Classe '{val_classe}' salvata con successo per l'Ente '{val_ente}' ({orario_i_str} - {orario_f_str})!")
+                    st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
@@ -1374,7 +1324,6 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti
                 enti_esistenti = config.get("enti", []).copy()
                 val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
                 if val_ente_corrente and val_ente_corrente not in enti_esistenti:
@@ -1383,7 +1332,6 @@ with tab3:
                 mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
                 mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                # Gestione Classi
                 classi_esistenti = config.get("classi", []).copy()
                 val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
                 if val_classe_corrente and val_classe_corrente not in classi_esistenti:
@@ -1392,7 +1340,6 @@ with tab3:
                 mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
                 mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                # Gestione Sedi
                 sedi_esistenti = config.get("sedi", []).copy()
                 val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
                 if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
@@ -1401,7 +1348,6 @@ with tab3:
                 mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
                 mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                # Gestione Modalità
                 modalita_esistenti = config.get("modalita", []).copy()
                 val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
                 if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
@@ -1912,30 +1858,33 @@ with tab4:
                     lista_imp = impegni_per_giorno[giorno]
                     dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b><hr style='margin: 4px 0; border-color: #444;'>"
                     for imp in lista_imp:
-                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
-                        escl_nota = " [Escluso]" if imp["escluso"] else ""
-                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
-                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
-                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
-                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})<br>"
+                        barrato = "text-decoration: line-through; opacity: 0.6;" if imp["svolto"] else ""
+                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato}'>"
+                        dettaglio_html += f"<b>{imp['orario']}</b> - {imp['classe']}<br>"
+                        dettaglio_html += f"<small>Ente: {imp['ente']} | Sede: {imp['sede']}</small>"
                         if imp['note']:
-                            dettaglio_html += f"<em>Note:</em> {imp['note']}"
+                            dettaglio_html += f"<br><small>Note: {imp['note']}</small>"
                         dettaglio_html += "</div>"
 
-                    html_cal += f'<div class="tooltip-container">'
-                    if len(lista_imp) == 1:
-                        imp_singolo = lista_imp[0]
-                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
-                        html_cal += f'<span class="badge-impegno">{testo_badge}</span>'
+                    count_imp = len(lista_imp)
+                    if count_imp == 1:
+                        badge_txt = f"{lista_imp[0]['orario']} {lista_imp[0]['classe']}"
+                        html_cal += f'''
+                        <div class="tooltip-container">
+                            <span class="badge-impegno">{badge_txt}</span>
+                            <div class="tooltip-content">{dettaglio_html}</div>
+                        </div>
+                        '''
                     else:
-                        html_cal += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
-                    
-                    html_cal += f'<div class="tooltip-content">{dettaglio_html}</div>'
-                    html_cal += '</div>'
-
+                        badge_txt = f"<b>{count_imp} Impegni</b>"
+                        html_cal += f'''
+                        <div class="tooltip-container">
+                            <span class="badge-impegno-multi">{badge_txt}</span>
+                            <div class="tooltip-content">{dettaglio_html}</div>
+                        </div>
+                        '''
                 html_cal += '</td>'
         html_cal += "</tr>"
 
     html_cal += "</table>"
-
     st.markdown(html_cal, unsafe_allow_html=True)
