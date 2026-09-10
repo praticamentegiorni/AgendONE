@@ -351,8 +351,10 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar
+# Funzione per sincronizzare l'evento su Google Calendar (con debug esteso)
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
+    st.write(f"DEBUG [Calendar] - Azione richiesta: **{azione}** | ID esistente ricevuto: **{evento_id_esistente}**")
+    st.write(f"DEBUG [Calendar] - Dati evento: {dati_evento}")
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
@@ -378,6 +380,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         service = build('calendar', 'v3', credentials=credentials)
 
         calendar_id = gsheets_secrets.get("calendar_id", "primary")
+        st.write(f"DEBUG [Calendar] - Target Calendar ID: {calendar_id}")
 
         if evento_id_esistente:
             evento_id_esistente = str(evento_id_esistente).strip()
@@ -416,32 +419,46 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                 },
                 'reminders': reminders_body,
             }
+            st.write(f"DEBUG [Calendar] - Payload (body) preparato: {body}")
 
         if azione == "crea":
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-            return event_result.get('id')
+            new_id = event_result.get('id')
+            st.write(f"DEBUG [Calendar] - Evento creato con successo! ID restituito: {new_id}")
+            return new_id
         elif azione == "aggiorna" and evento_id_esistente:
             try:
                 service.events().update(calendarId=calendar_id, eventId=evento_id_esistente, body=body).execute()
+                st.write(f"DEBUG [Calendar] - Evento aggiornato con successo per ID: {evento_id_esistente}")
                 return evento_id_esistente
             except HttpError as err:
+                st.write(f"DEBUG [Calendar] - Errore HTTP in aggiornamento (Status {err.resp.status}): {err}")
                 if err.resp.status == 404:
+                    st.write("DEBUG [Calendar] - Evento non trovato su Google Calendar (404), procedo con la creazione di un nuovo evento.")
                     event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-                    return event_result.get('id')
+                    new_id = event_result.get('id')
+                    st.write(f"DEBUG [Calendar] - Nuovo evento ricreato. ID: {new_id}")
+                    return new_id
                 else:
                     raise err
         elif azione == "aggiorna" and not evento_id_esistente:
+            st.write("DEBUG [Calendar] - Azione 'aggiorna' senza ID esistente: procedo a creare un nuovo evento.")
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-            return event_result.get('id')
+            new_id = event_result.get('id')
+            st.write(f"DEBUG [Calendar] - Evento creato. ID: {new_id}")
+            return new_id
         elif azione == "elimina" and evento_id_esistente:
             try:
                 service.events().delete(calendarId=calendar_id, eventId=evento_id_esistente).execute()
+                st.write(f"DEBUG [Calendar] - Evento eliminato con successo. ID: {evento_id_esistente}")
             except HttpError as err:
+                st.write(f"DEBUG [Calendar] - Errore HTTP in eliminazione (Status {err.resp.status}): {err}")
                 if err.resp.status != 404:
                     raise err
             return None
     except Exception as e:
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
+        st.exception(e)
         return None
 
 # Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
@@ -712,11 +729,7 @@ with tab1:
                         "Reminder_Minuti": minuti_prom_singolo
                     }
                     
-                    try:
-                        cal_id = sincronizza_google_calendar("crea", dati_evento)
-                    except Exception as e:
-                        st.error(f"Errore Calendar: {e}")
-                        cal_id = None
+                    cal_id = sincronizza_google_calendar("crea", dati_evento)
 
                     nuovo_dato = pd.DataFrame({
                         "Data": [data_selezionata.strftime("%Y-%m-%d")],
