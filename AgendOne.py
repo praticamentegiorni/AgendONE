@@ -2,6 +2,7 @@ import datetime
 import io
 import json
 import os
+import re
 import pandas as pd
 import streamlit as st
 
@@ -236,6 +237,13 @@ def calcola_ore(ora_inizio, ora_fine):
     diff = (datetime.datetime.combine(datetime.date.min, t_f.time()) - 
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
+
+# Funzione per validare il formato orario obbligatorio all'inizio (es. 00:00-00:00 con ore 0-23 e minuti 0-59)
+def valida_formato_orario_testo(testo):
+    # Regex per validare HH:MM-HH:MM all'inizio della stringa
+    pattern = r"^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)"
+    match = re.match(pattern, testo.strip())
+    return bool(match)
 
 # Funzione per generare il Report PDF raggruppato per Ente e Classe
 def genera_pdf_report(df_report):
@@ -764,15 +772,15 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # Casella testo aggiuntiva con campi obbligatori "00:00-00:00" all'inizio per ciascuna riga
+        # Casella testo aggiuntiva condizionale per inserimento multiplo con formato obbligatorio
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
             st.markdown("### Sezione Inserimento Multiplo Appuntamenti")
-            st.markdown("Inserisci un appuntamento per riga. **Ogni riga deve iniziare obbligatoriamente con il formato `00:00-00:00`** (ore da 0 a 23, minuti da 0 a 59), seguito dal testo dell'appuntamento.")
+            st.markdown("⚠️ *Obbligatorio inserire all'inizio di ogni riga il formato orario nel formato **HH:MM-HH:MM** (Ore da 00 a 23, Minuti da 00 a 59).*")
             appunto_multiplo = st.text_area(
-                "Testo Appuntamenti Multipli (obbligatorio formato orario iniziale)",
-                placeholder="08:00-09:30 Primo appuntamento\n10:00-12:00 Secondo appuntamento...",
+                "Testo Appuntamenti Multipli (Formato obbligatorio HH:MM-HH:MM all'inizio)",
+                placeholder="08:30-10:30 Testo appuntamento...",
                 height=150,
                 key="textarea_multiplo"
             )
@@ -781,41 +789,23 @@ with tab1:
         submit_button = st.form_submit_button(label=submit_button_label, use_container_width=True)
 
         if submit_button:
-            # Validazione specifica per Inserimento Multiplo se selezionato
+            # Controllo validazione obbligatoria per inserimento multiplo
             errore_validazione = False
-            righe_multiplo_validate = []
-            
             if tipo_inserimento == "Inserimento Multiplo":
                 if not appunto_multiplo.strip():
-                    st.error("Il campo dell'inserimento multiplo non può essere vuoto.")
+                    st.error("Il campo dell'inserimento multiplo non può essere vuoto ed è obbligatorio.")
                     errore_validazione = True
                 else:
-                    import re
-                    # Pattern per verificare la presenza di HH:MM-HH:MM all'inizio della riga
-                    pattern_orario = r"^([0-1]?[0-9]|2[0-3]):([0-5][0-9])-([0-1]?[0-9]|2[0-3]):([0-5][0-9])"
-                    
-                    linee = appunto_multiplo.strip().split("\n")
-                    for idx_riga, linea in enumerate(linee, start=1):
-                        linea_pulita = linea.strip()
-                        if not linea_pulita:
-                            continue
-                        match = re.match(pattern_orario, linea_pulita)
-                        if not match:
-                            st.error(f"Errore alla riga {idx_riga}: la riga deve iniziare obbligatoriamente con il formato `00:00-00:00` valido (ore 0-23, minuti 0-59). Testo inserito: '{linea_pulita}'")
-                            errore_validazione = True
-                            break
-                        
-                        # Estrazione ore e minuti per validazione logica inizio < fine opzionale o salvataggio
-                        h_i, m_i, h_f, m_f = map(int, match.groups())
-                        minuti_inizio_tot = h_i * 60 + m_i
-                        minuti_fine_tot = h_f * 60 + m_f
-                        if minuti_inizio_tot >= minuti_fine_tot:
-                            st.error(f"Errore alla riga {idx_riga}: l'orario di inizio ({h_i:02d}:{m_i:02d}) deve essere precedente all'orario di fine ({h_f:02d}:{m_f:02d}).")
+                    # Verifica che ogni riga o il testo inizi con il formato orario valido
+                    righe_multiplo = appunto_multiplo.strip().split("\n")
+                    for r_idx, riga_testo in enumerate(righe_multiplo):
+                        if riga_testo.strip() and not valida_formato_orario_testo(riga_testo):
+                            st.error(f"Errore alla riga {r_idx + 1}: Il testo deve iniziare obbligatoriamente con il formato orario 'HH:MM-HH:MM' (es. 08:30-10:30).")
                             errore_validazione = True
                             break
 
             if not errore_validazione:
-                if orario_inizio_str >= orario_fine_str and tipo_inserimento != "Inserimento Multiplo":
+                if orario_inizio_str >= orario_fine_str:
                     st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                 else:
                     val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
@@ -1172,29 +1162,20 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
                 
-                # Modifica del testo inserito per il multi-impegno (richiesta specifica)
+                # Modifica del testo inserito per il multi-impegno con validazione formato
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
-                st.markdown("Ogni riga deve iniziare obbligatoriamente con il formato `00:00-00:00` (ore da 0 a 23, minuti da 0 a 59).")
-                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla - Formato obbligatorio HH:MM-HH:MM)", value=attuale_appunto_multiplo, height=120)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
-                    # Validazione form di modifica per il campo multi-impegno
-                    errore_mod_multiplo = False
+                    errore_mod_val = False
                     if mod_appunto_multiplo.strip():
-                        import re
-                        pattern_orario = r"^([0-1]?[0-9]|2[0-3]):([0-5][0-9])-([0-1]?[0-9]|2[0-3]):([0-5][0-9])"
-                        linee_mod = mod_appunto_multiplo.strip().split("\n")
-                        for idx_riga, linea in enumerate(linee_mod, start=1):
-                            linea_pulita = linea.strip()
-                            if not linea_pulita:
-                                continue
-                            match = re.match(pattern_orario, linea_pulita)
-                            if not match:
-                                st.error(f"Errore alla riga {idx_riga} nel testo multiplo: la riga deve iniziare con il formato `00:00-00:00` valido.")
-                                errore_mod_multiplo = True
+                        for r_idx, riga_testo in enumerate(mod_appunto_multiplo.strip().split("\n")):
+                            if riga_testo.strip() and not valida_formato_orario_testo(riga_testo):
+                                st.error(f"Errore alla riga {r_idx + 1}: Il testo nel multi-impegno deve iniziare con il formato 'HH:MM-HH:MM' (Ore 0-23, Minuti 0-59).")
+                                errore_mod_val = True
                                 break
 
-                    if not errore_mod_multiplo:
+                    if not errore_mod_val:
                         if mod_orario_i_str >= mod_orario_f_str:
                             st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                         else:
