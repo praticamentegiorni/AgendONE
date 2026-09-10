@@ -8,7 +8,7 @@ import streamlit as st
 # Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
 
-# CSS PERSONALIZZATO PER IL MENU IN ALTO E LA VISTA CALENDARIO
+# CSS PERSONALIZZATO E OTTIMIZZAZIONE RESPONSIVE PER SMARTPHONE
 st.markdown(
     """
     <style>
@@ -19,7 +19,7 @@ st.markdown(
         background-color: #1e293b !important;
         color: #f8fafc !important;
         padding: 12px 24px !important;
-        border-radius: 8px !important; /* Arrotondati su tutti i lati per sembrare bottoni */
+        border-radius: 8px !important;
         margin-right: 10px !important;
         border: 1px solid #334155 !important;
         transition: all 0.2s ease-in-out !important;
@@ -171,6 +171,49 @@ st.markdown(
       color: #64748b;
       margin: 0;
     }
+
+    /* ========================================================== */
+    /* OTTIMIZZAZIONI SPECIFICHE PER SMARTPHONE (Schermi stretti) */
+    /* ========================================================== */
+    @media screen and (max-width: 768px) {
+        /* Forza lo stacking verticale delle colonne di Streamlit su mobile */
+        .stColumns {
+            flex-direction: column !important;
+        }
+        div[data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+            margin-bottom: 8px !important;
+        }
+        
+        /* Riduce i margini e i padding del container principale */
+        .block-container {
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+            padding-top: 1rem !important;
+        }
+
+        /* Adatta la dimensione dei Tab del menu per schermi verticali */
+        button[data-baseweb="tab"] {
+            font-size: 14px !important;
+            padding: 8px 12px !important;
+            margin-right: 4px !important;
+        }
+
+        /* Ottimizzazione celle calendario mensile su mobile */
+        .cal-cell {
+            height: 75px !important;
+            padding: 3px !important;
+        }
+        .day-number {
+            font-size: 11px !important;
+        }
+        .badge-impegno, .badge-impegno-multi {
+            font-size: 9px !important;
+            padding: 1px 3px !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -303,7 +346,6 @@ def genera_pdf_report(df_report):
         elements.append(Spacer(1, 4))
         
         if not df_report.empty:
-            # Raggruppamento corretto: Ente -> Classe -> Lista di attività
             gruppi_ente_classe = defaultdict(lambda: defaultdict(list))
             for _, row in df_report.iterrows():
                 e_nome = str(row.get("Ente", "")).strip()
@@ -344,7 +386,6 @@ def genera_pdf_report(df_report):
                 totale_ore_ente = 0.0
                 row_idx = 1
                 
-                # Ordiniamo le classi alfabeticamente per coerenza visiva all'interno dell'ente
                 for classe_nome in sorted(classi_dict.keys()):
                     lista_attivita = classi_dict[classe_nome]
                     totale_ore_classe = 0.0
@@ -377,7 +418,6 @@ def genera_pdf_report(df_report):
                         ])
                         row_idx += 1
                     
-                    # Totale parziale per ogni classe
                     det_data.append([
                         Paragraph(f"<b>Totale parziale ({classe_nome}):</b>", style_subtot_classe),
                         "", "", "", "", "",
@@ -387,7 +427,6 @@ def genera_pdf_report(df_report):
                     table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
                     row_idx += 1
 
-                # Totale ore per quell'ente in fondo alla tabella dell'ente
                 det_data.append([
                     Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
                     "", "", "", "", "",
@@ -712,7 +751,6 @@ opzioni_promemoria = {
 with tab1:
     st.subheader("Registrazione Nuova Attività")
     
-    # Flag per inserimento Normale o Multiplo
     tipo_inserimento = st.radio("Seleziona modalità di inserimento:", options=["Inserimento Normale", "Inserimento Multiplo"], horizontal=True)
 
     with st.form("form_orario", clear_on_submit=True):
@@ -769,7 +807,6 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # 8 righe condizionali per Inserimento Multiplo (orari ristretti e più spazio al testo)
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
@@ -812,13 +849,12 @@ with tab1:
                     config["enti"].append(nuovo_ente_libero)
                 if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
                     config["classi"].append(nuova_classe_libera)
-                if nuova_sede_libera and nueva_sede_libera not in config["sedi"]:
+                if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
                     config["sedi"].append(nuova_sede_libera)
                 if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
                     config["modalita"].append(nuovo_mod_libero)
                 salva_config(config)
 
-                # Generazione codice univoco composto da data (DDMMYYYY) + ora (HH:MM:SS)
                 now_ts = datetime.datetime.now()
                 codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
 
@@ -1108,7 +1144,6 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
-                # Gestione Enti
                 enti_esistenti = config.get("enti", []).copy()
                 val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
                 if val_ente_corrente and val_ente_corrente not in enti_esistenti:
@@ -1117,7 +1152,6 @@ with tab3:
                 mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
                 mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
-                # Gestione Classi
                 classi_esistenti = config.get("classi", []).copy()
                 val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
                 if val_classe_corrente and val_classe_corrente not in classi_esistenti:
@@ -1126,7 +1160,6 @@ with tab3:
                 mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
                 mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
-                # Gestione Sedi
                 sedi_esistenti = config.get("sedi", []).copy()
                 val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
                 if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
@@ -1135,7 +1168,6 @@ with tab3:
                 mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
                 mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
-                # Gestione Modalità
                 modalita_esistenti = config.get("modalita", []).copy()
                 val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
                 if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
@@ -1158,7 +1190,6 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
                 
-                # Modifica del testo inserito per il multi-impegno: se è un appuntamento multiplo, mostra le 8 righe, altrimenti la visualizzazione normale (singolo campo)
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
                 is_multiplo = bool(attuale_appunto_multiplo.strip())
 
