@@ -414,6 +414,7 @@ def genera_pdf_report(df_report):
     except Exception as e:
         return None
 
+# Funzione per ottenere il client gspread e il foglio desiderato
 def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
     try:
         import gspread
@@ -442,6 +443,7 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
 
+# Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     try:
         from google.oauth2 import service_account
@@ -482,7 +484,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             body = {
                 'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
-                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento['Note']}\nGestito da AgendOne",
+                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento.get('Note', '')}\nAppunto/Multi-impegno: {dati_evento.get('Appunto_Multiplo', '')}\nGestito da AgendOne",
                 'start': {
                     'dateTime': start_datetime,
                     'timeZone': 'Europe/Rome',
@@ -523,6 +525,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
 
+# Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
 def carica_config():
     default_config = {
         "enti": [],
@@ -598,8 +601,9 @@ def salva_config(config):
 
 config = carica_config()
 
+# Caricamento dati da Google Sheets (da Foglio1)
 def carica_dati():
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti", "Appuntamento", "Codice_Univoco"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Appunto_Multiplo", "Codice_Univoco", "Calendar_ID", "Reminder_Minuti"]
     empty_df = pd.DataFrame(columns=cols_standard)
     try:
         worksheet = get_gspread_client_and_sheet("Foglio1")
@@ -644,16 +648,6 @@ def carica_dati():
             df["Reminder_Minuti"] = 240
         else:
             df["Reminder_Minuti"] = pd.to_numeric(df["Reminder_Minuti"], errors="coerce").fillna(240).astype(int)
-
-        if "Appuntamento" not in df.columns:
-            df["Appuntamento"] = ""
-        else:
-            df["Appuntamento"] = df["Appuntamento"].fillna("").astype(str)
-
-        if "Codice_Univoco" not in df.columns:
-            df["Codice_Univoco"] = ""
-        else:
-            df["Codice_Univoco"] = df["Codice_Univoco"].fillna("").astype(str)
             
         if "Ore" not in df.columns or df["Ore"].isna().all():
             df["Ore"] = df.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
@@ -666,10 +660,11 @@ def carica_dati():
     except Exception as e:
         return empty_df
 
+# Salvataggio dati su Google Sheets (su Foglio1)
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=["Data_dt"])
-    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Calendar_ID", "Reminder_Minuti", "Appuntamento", "Codice_Univoco"]
+    cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Appunto_Multiplo", "Codice_Univoco", "Calendar_ID", "Reminder_Minuti"]
     for c in cols_standard:
         if c not in df_to_save.columns:
             df_to_save[c] = ""
@@ -699,241 +694,158 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "Calendario",
 ])
 
+opzioni_promemoria = {
+    "15 minuti prima": 15,
+    "30 minuti prima": 30,
+    "1 ora prima": 60,
+    "2 ore prima": 120,
+    "4 ore prima": 240,
+    "1 giorno prima": 1440
+}
+
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
     st.subheader("Registrazione Nuova Attività")
     
-    tipo_inserimento = st.radio("Seleziona modalità di inserimento:", ["Inserimento Normale", "Inserimento Multiplo (Multimpegno)"], horizontal=True)
+    # Flag per inserimento Normale o Multiplo
+    tipo_inserimento = st.radio("Seleziona modalità di inserimento:", options=["Inserimento Normale", "Inserimento Multiplo"], horizontal=True)
 
-    if tipo_inserimento == "Inserimento Normale":
-        with st.form("form_orario", clear_on_submit=True):
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                data_selezionata = st.date_input("Giorno", value=datetime.date.today(), format="DD/MM/YYYY")
-                mese_str = traduci_mese(data_selezionata.strftime("%B"))
-            with col_d2:
-                st.info(f"Mese di riferimento: **{mese_str}**")
+    with st.form("form_orario", clear_on_submit=True):
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            data_selezionata = st.date_input("Giorno", value=datetime.date.today(), format="DD/MM/YYYY")
+            mese_str = traduci_mese(data_selezionata.strftime("%B"))
+        with col_d2:
+            st.info(f"Mese di riferimento: **{mese_str}**")
 
-            st.markdown("**Selezione Orario**")
-            col_o1, col_o2, col_o3, col_o4 = st.columns(4)
-            with col_o1:
-                ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9)
-            with col_o2:
-                min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=0)
-            with col_o3:
-                ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=18)
-            with col_o4:
-                min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=0)
+        st.markdown("**Selezione Orario**")
+        col_o1, col_o2, col_o3, col_o4 = st.columns(4)
+        with col_o1:
+            ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9)
+        with col_o2:
+            min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=0)
+        with col_o3:
+            ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=18)
+        with col_o4:
+            min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=0)
 
-            orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
-            orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
-            ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
+        orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
+        orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
+        ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
 
-            st.caption(f"Durata stimata: **{ore_calcolate} ore**")
+        st.caption(f"Durata stimata: **{ore_calcolate} ore**")
 
-            col_t0, col_t1, col_t2, col_t3 = st.columns(4)
-            
-            opts_enti = config.get("enti", []).copy()
-            opts_classi = config.get("classi", []).copy()
-            opts_sedi = config.get("sedi", []).copy()
-            opts_modalita = config.get("modalita", []).copy()
+        col_t0, col_t1, col_t2, col_t3 = st.columns(4)
+        
+        opts_enti = config.get("enti", []).copy()
+        opts_classi = config.get("classi", []).copy()
+        opts_sedi = config.get("sedi", []).copy()
+        opts_modalita = config.get("modalita", []).copy()
 
-            with col_t0:
-                ente = st.selectbox("Ente", options=opts_enti if opts_enti else [""], index=0 if opts_enti else 0, key="sel_ente")
-                nuovo_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="lib_ente")
-            with col_t1:
-                classe = st.selectbox("Classe", options=opts_classi if opts_classi else [""], index=0 if opts_classi else 0, key="sel_classe")
-                nuova_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="lib_classe")
-            with col_t2:
-                sede = st.selectbox("Sede", options=opts_sedi if opts_sedi else [""], index=0 if opts_sedi else 0, key="sel_sede")
-                nuova_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="lib_sede")
-            with col_t3:
-                modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
-                nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
+        with col_t0:
+            ente = st.selectbox("Ente", options=opts_enti if opts_enti else [""], index=0 if opts_enti else 0, key="sel_ente")
+            nuovo_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="lib_ente")
+        with col_t1:
+            classe = st.selectbox("Classe", options=opts_classi if opts_classi else [""], index=0 if opts_classi else 0, key="sel_classe")
+            nuova_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="lib_classe")
+        with col_t2:
+            sede = st.selectbox("Sede", options=opts_sedi if opts_sedi else [""], index=0 if opts_sedi else 0, key="sel_sede")
+            nuova_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="lib_sede")
+        with col_t3:
+            modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
+            nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-            st.selectbox("Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
-            minuti_scelti = 240
+        st.selectbox("Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+        st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+        minuti_scelti = 240
 
-            svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
-            escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
-            note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
+        svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
+        escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
+        
+        note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
+        
+        # Casella testo aggiuntiva condizionale per inserimento multiplo
+        appunto_multiplo = ""
+        if tipo_inserimento == "Inserimento Multiplo":
+            st.markdown("---")
+            st.markdown("### Sezione Inserimento Multiplo Appuntamenti")
+            appunto_multiplo = st.text_area(
+                "Testo Appuntamenti Multipli (puoi andare a capo, usa lo scroll)",
+                placeholder="Scrivi qui i testi da inserire nella stessa cella...",
+                height=150,
+                key="textarea_multiplo"
+            )
 
-            submit_button = st.form_submit_button(label="Salva Attività", use_container_width=True)
+        submit_button_label = "Salva Inserimento Multiplo" if tipo_inserimento == "Inserimento Multiplo" else "Salva Attività"
+        submit_button = st.form_submit_button(label=submit_button_label, use_container_width=True)
 
-            if submit_button:
-                if orario_inizio_str >= orario_fine_str:
-                    st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
-                else:
-                    val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
-                    val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                    val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
-                    val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
+        if submit_button:
+            if orario_inizio_str >= orario_fine_str:
+                st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
+            else:
+                val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
+                val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
+                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
+                val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
-                    if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
-                        config["enti"].append(nuovo_ente_libero)
-                    if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
-                        config["classi"].append(nuova_classe_libera)
-                    if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
-                        config["sedi"].append(nuova_sede_libera)
-                    if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
-                        config["modalita"].append(nuovo_mod_libero)
-                    salva_config(config)
+                if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
+                    config["enti"].append(nuovo_ente_libero)
+                if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
+                    config["classi"].append(nuova_classe_libera)
+                if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
+                    config["sedi"].append(nuova_sede_libera)
+                if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
+                    config["modalita"].append(nuovo_mod_libero)
+                salva_config(config)
 
-                    dati_evento = {
-                        "Data": data_selezionata.strftime("%Y-%m-%d"),
-                        "Orario Inizio": orario_inizio_str,
-                        "Orario Fine": orario_fine_str,
-                        "Ente": val_ente,
-                        "Classe": val_classe,
-                        "Sede": val_sede,
-                        "Modalità": val_modalita,
-                        "Note": note,
-                        "Reminder_Minuti": minuti_scelti
-                    }
-                    
-                    cal_id = sincronizza_google_calendar("crea", dati_evento)
+                # Generazione codice univoco composto da data (DDMMYYYY) + ora (HH:MM:SS senza i due punti o con i due punti)
+                now_ts = datetime.datetime.now()
+                codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
 
-                    nuovo_dato = pd.DataFrame({
-                        "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                        "Mese": [mese_str],
-                        "Orario Inizio": [orario_inizio_str],
-                        "Orario Fine": [orario_fine_str],
-                        "Ore": [ore_calcolate],
-                        "Ente": [val_ente],
-                        "Classe": [val_classe],
-                        "Sede": [val_sede],
-                        "Modalità": [val_modalita],
-                        "Svolto": [svolto_iniziale],
-                        "Escludi_Conteggio": [escludi_conteggio_iniziale],
-                        "Note": [note],
-                        "Calendar_ID": [str(cal_id) if cal_id else ""],
-                        "Reminder_Minuti": [minuti_scelti],
-                        "Appuntamento": [""],
-                        "Codice_Univoco": [""]
-                    })
+                dati_evento = {
+                    "Data": data_selezionata.strftime("%Y-%m-%d"),
+                    "Orario Inizio": orario_inizio_str,
+                    "Orario Fine": orario_fine_str,
+                    "Ente": val_ente,
+                    "Classe": val_classe,
+                    "Sede": val_sede,
+                    "Modalità": val_modalita,
+                    "Note": note,
+                    "Appunto_Multiplo": appunto_multiplo,
+                    "Reminder_Minuti": minuti_scelti
+                }
+                
+                cal_id = sincronizza_google_calendar("crea", dati_evento)
 
-                    df = pd.concat([df, nuovo_dato], ignore_index=True)
-                    salva_dati(df)
-                    st.success("Attività salvata e sincronizzata con Google Calendar!")
-                    st.rerun()
+                nuovo_dato = pd.DataFrame({
+                    "Data": [data_selezionata.strftime("%Y-%m-%d")],
+                    "Mese": [mese_str],
+                    "Orario Inizio": [orario_inizio_str],
+                    "Orario Fine": [orario_fine_str],
+                    "Ore": [ore_calcolate],
+                    "Ente": [val_ente],
+                    "Classe": [val_classe],
+                    "Sede": [val_sede],
+                    "Modalità": [val_modalita],
+                    "Svolto": [svolto_iniziale],
+                    "Escludi_Conteggio": [escludi_conteggio_iniziale],
+                    "Note": [note],
+                    "Appunto_Multiplo": [appunto_multiplo],
+                    "Codice_Univoco": [codice_univoco_generato],
+                    "Calendar_ID": [str(cal_id) if cal_id else ""],
+                    "Reminder_Minuti": [minuti_scelti]
+                })
 
-    else:
-        st.markdown("### Inserimento Multiplo (Multimpegno)")
-        with st.form("form_inserimento_multiplo", clear_on_submit=True):
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                data_selezionata = st.date_input("Giorno", value=datetime.date.today(), format="DD/MM/YYYY", key="multi_data")
-                mese_str = traduci_mese(data_selezionata.strftime("%B"))
-            with col_d2:
-                st.info(f"Mese di riferimento: **{mese_str}**")
-
-            st.markdown("**Selezione Orario**")
-            col_o1, col_o2, col_o3, col_o4 = st.columns(4)
-            with col_o1:
-                ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9, key="multi_ora_i")
-            with col_o2:
-                min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=0, key="multi_min_i")
-            with col_o3:
-                ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=18, key="multi_ora_f")
-            with col_o4:
-                min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=0, key="multi_min_f")
-
-            orario_inizio_str = f"{ora_i:02d}:{min_i:02d}"
-            orario_fine_str = f"{ora_f:02d}:{min_f:02d}"
-            ore_calcolate = calcola_ore(orario_inizio_str, orario_fine_str)
-
-            st.caption(f"Durata stimata: **{ore_calcolate} ore**")
-
-            col_t0, col_t1, col_t2, col_t3 = st.columns(4)
-            
-            opts_enti = config.get("enti", []).copy()
-            opts_classi = config.get("classi", []).copy()
-            opts_sedi = config.get("sedi", []).copy()
-            opts_modalita = config.get("modalita", []).copy()
-
-            with col_t0:
-                ente = st.selectbox("Ente", options=opts_enti if opts_enti else [""], index=0 if opts_enti else 0, key="multi_sel_ente")
-                nuovo_ente_libero = st.text_input("O digita nuovo ente:", placeholder="Se non è in elenco...", key="multi_lib_ente")
-            with col_t1:
-                classe = st.selectbox("Classe", options=opts_classi if opts_classi else [""], index=0 if opts_classi else 0, key="multi_sel_classe")
-                nuova_classe_libera = st.text_input("O digita nuova classe:", placeholder="Se non è in elenco...", key="multi_lib_classe")
-            with col_t2:
-                sede = st.selectbox("Sede", options=opts_sedi if opts_sedi else [""], index=0 if opts_sedi else 0, key="multi_sel_sede")
-                nuova_sede_libera = st.text_input("O digita nuova sede:", placeholder="Se non è in elenco...", key="multi_lib_sede")
-            with col_t3:
-                modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="multi_sel_mod")
-                nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="multi_lib_mod")
-
-            svolto_iniziale = st.checkbox("Impegno già svolto", value=False, key="multi_svolto")
-            escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False, key="multi_escludi")
-            nota_multimpegno = st.text_area("Nota (Inserimento Multiplo - Tabella Multimpegno)", placeholder="Scrivi qui i dettagli dell'appuntamento...", key="multi_nota")
-
-            submit_multi_button = st.form_submit_button(label="Salva inserimento multiplo", use_container_width=True)
-
-            if submit_multi_button:
-                if orario_inizio_str >= orario_fine_str:
-                    st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
-                else:
-                    val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
-                    val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                    val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
-                    val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
-
-                    if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
-                        config["enti"].append(nuovo_ente_libero)
-                    if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
-                        config["classi"].append(nuova_classe_libera)
-                    if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
-                        config["sedi"].append(nuova_sede_libera)
-                    if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
-                        config["modalita"].append(nuovo_mod_libero)
-                    salva_config(config)
-
-                    ora_attuale = datetime.datetime.now()
-                    codice_univoco_val = data_selezionata.strftime("%d%m%Y") + "_" + ora_attuale.strftime("%H:%M:%S")
-
-                    dati_evento = {
-                        "Data": data_selezionata.strftime("%Y-%m-%d"),
-                        "Orario Inizio": orario_inizio_str,
-                        "Orario Fine": orario_fine_str,
-                        "Ente": val_ente,
-                        "Classe": val_classe,
-                        "Sede": val_sede,
-                        "Modalità": val_modalita,
-                        "Note": nota_multimpegno,
-                        "Reminder_Minuti": 240
-                    }
-                    
-                    cal_id = sincronizza_google_calendar("crea", dati_evento)
-
-                    nuovo_dato = pd.DataFrame({
-                        "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                        "Mese": [mese_str],
-                        "Orario Inizio": [orario_inizio_str],
-                        "Orario Fine": [orario_fine_str],
-                        "Ore": [ore_calcolate],
-                        "Ente": [val_ente],
-                        "Classe": [val_classe],
-                        "Sede": [val_sede],
-                        "Modalità": [val_modalita],
-                        "Svolto": [svolto_iniziale],
-                        "Escludi_Conteggio": [escludi_conteggio_iniziale],
-                        "Note": [nota_multimpegno],
-                        "Calendar_ID": [str(cal_id) if cal_id else ""],
-                        "Reminder_Minuti": [240],
-                        "Appuntamento": [nota_multimpegno],
-                        "Codice_Univoco": [codice_univoco_val]
-                    })
-
-                    df = pd.concat([df, nuovo_dato], ignore_index=True)
-                    salva_dati(df)
-                    st.success("Inserimento multiplo salvato con successo e sincronizzato con Google Calendar!")
-                    st.rerun()
+                df = pd.concat([df, nuovo_dato], ignore_index=True)
+                salva_dati(df)
+                st.success("Attività salvata e sincronizzata con Google Calendar!")
+                st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
     st.subheader("Gestione Avanzata Voci (Enti, Classi, Sedi e Modalità)")
-    
+    st.markdown("Gestisci gli elenchi a tendina per l'inserimento rapido delle attività. Il sistema impedisce automaticamente l'inserimento di voci duplicate.")
+
     def gestisci_sezione_combo(titolo_sezione, chiave_config):
         st.markdown(f"### {titolo_sezione}")
         lista_corrente = config[chiave_config]
@@ -949,7 +861,7 @@ with tab2:
         with st.form(key=f"form_add_{chiave_config}", clear_on_submit=True):
             c_in1, c_in2 = st.columns([3, 1])
             with c_in1:
-                nuova_voce = st.text_input(f"Aggiungi nuovo elemento a {titolo_sezione}", placeholder="Aggiungi...", label_visibility="collapsed")
+                nuova_voce = st.text_input(f"Aggiungi nuovo elemento a {titolo_sezione}", placeholder=esci_placeholder(titolo_sezione), label_visibility="collapsed")
             with c_in2:
                 btn_aggiungi = st.form_submit_button("Aggiungi", use_container_width=True)
             
@@ -958,14 +870,15 @@ with tab2:
                 if not nuova_pulita:
                     st.warning("Il campo non può essere vuoto.")
                 elif any(v.lower() == nuova_pulita.lower() for v in lista_corrente):
-                    st.error("Voce già presente.")
+                    st.error(restituisci_messaggio_duplicato(titolo_sezione, nuova_pulita))
                 else:
                     lista_corrente.append(nuova_pulita)
                     salva_config(config)
-                    st.success(f"Elemento aggiunto!")
+                    st.success(f"Elemento '{nuova_pulita}' aggiunto con successo!")
                     st.rerun()
 
         if voce_selezionata != "-- Seleziona per modificare/eliminare --":
+            st.markdown(f"**Modifica o rimuovi:** `{voce_selezionata}`")
             with st.form(key=f"form_edit_{chiave_config}"):
                 c_ed1, c_ed2, c_ed3 = st.columns([3, 1, 1])
                 with c_ed1:
@@ -977,17 +890,32 @@ with tab2:
 
                 if btn_salva_mod:
                     valore_pulito = valore_modificato.strip()
-                    if valore_pulito:
+                    if not valore_pulito:
+                        st.warning("Il nome non può essere vuoto.")
+                    elif valore_pulito.lower() != voce_selezionata.lower() and any(v.lower() == valore_pulito.lower() for v in lista_corrente):
+                        st.error("Esiste già una voce con questo nome.")
+                    else:
                         idx = lista_corrente.index(voce_selezionata)
                         lista_corrente[idx] = valore_pulito
                         salva_config(config)
+                        st.success("Voce aggiornata con successo!")
                         st.rerun()
 
                 if btn_elimina:
                     if voce_selezionata in lista_corrente:
                         lista_corrente.remove(voce_selezionata)
                         salva_config(config)
+                        st.success(f"Voce '{voce_selezionata}' eliminata!")
                         st.rerun()
+
+    def esci_placeholder(t):
+        if "Enti" in t: return "Es. Scuola Bufalini..."
+        if "Classi" in t: return "Es. Classe 4A..."
+        if "Sedi" in t: return "Es. Aula Magna..."
+        return "Es. Presenza / Online..."
+
+    def restituisci_messaggio_duplicato(t, nome):
+        return f"Attenzione: '{nome}' è già presente nell'elenco degli {t.lower()}." if t == "Enti" else f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
 
     col1, col2, col3, col4 = st.columns(4, gap="medium")
     with col1:
@@ -1011,6 +939,7 @@ with tab3:
             df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
+            
             df_vis["Ore"] = df_vis.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
             df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
             
@@ -1053,7 +982,7 @@ with tab3:
         )
 
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
-        st.info(f"**Totale ore (visualizzate in archivio):** {ore_totali_archivio:.2f} ore")
+        st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
@@ -1080,13 +1009,19 @@ with tab3:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(righe_selezionate).reset_index(drop=True)
                     salva_dati(df)
+                    st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
+                else:
+                    st.warning("Seleziona almeno un appuntamento da eliminare.")
         with col_act2:
             if st.button("Duplica Selezionato", use_container_width=True):
                 if len(righe_selezionate) == 1:
                     riga_idx = righe_selezionate[0]
                     nuova_riga = df.loc[riga_idx].copy()
-                    nuova_riga["Note"] = str(nuova_riga.get("Note", "")) + " (Copia)"
+                    if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
+                        nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
+                    else:
+                        nuova_riga["Note"] = "Copia"
                     
                     dati_evento = {
                         "Data": str(nuova_riga["Data"]),
@@ -1097,17 +1032,177 @@ with tab3:
                         "Sede": str(nuova_riga["Sede"]),
                         "Modalità": str(nuova_riga["Modalità"]),
                         "Note": str(nuova_riga["Note"]),
-                        "Reminder_Minuti": 240
+                        "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
+                        "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240))
                     }
                     cal_id = sincronizza_google_calendar("crea", dati_evento)
                     nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
                     
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     salva_dati(df)
+                    st.success("Appuntamento duplicato e aggiunto a Calendar!")
                     st.rerun()
+                elif len(righe_selezionate) > 1:
+                    st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
+                else:
+                    st.warning("Seleziona un appuntamento da duplicare.")
 
         st.markdown("---")
-        st.subheader("Generazione Report & Filtri Avanzati")
+
+        if len(righe_selezionate) == 1:
+            riga_idx = righe_selezionate[0]
+            riga_corrente = df.loc[riga_idx]
+
+            st.markdown(f"### Modifica Appuntamento (Riga ID {riga_idx})")
+            with st.form("form_modifica_multipla"):
+                try:
+                    data_default = datetime.datetime.strptime(str(riga_corrente["Data"]), "%Y-%m-%d").date()
+                except:
+                    data_default = datetime.date.today()
+
+                try:
+                    parti_i = str(riga_corrente["Orario Inizio"]).split(":")
+                    h_def_i, m_def_i = int(parti_i[0]), int(parti_i[1])
+                except:
+                    h_def_i, m_def_i = 9, 0
+
+                try:
+                    parti_f = str(riga_corrente["Orario Fine"]).split(":")
+                    h_def_f, m_def_f = int(parti_f[0]), int(parti_f[1])
+                except:
+                    h_def_f, m_def_f = 18, 0
+
+                mod_data = st.date_input("Data", value=data_default, format="DD/MM/YYYY")
+
+                c_mo1, c_mo2, c_mo3, c_mo4 = st.columns(4)
+                with c_mo1:
+                    mod_ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=h_def_i if h_def_i in range(0, 24) else 9)
+                with c_mo2:
+                    mod_min_i = st.selectbox("Minuti Inizio", options=list(range(0, 60)), index=m_def_i if m_def_i in range(0, 60) else 0)
+                with c_mo3:
+                    mod_ora_f = st.selectbox("Ora Fine", options=list(range(0, 24)), index=h_def_f if h_def_f in range(0, 24) else 18)
+                with c_mo4:
+                    mod_min_f = st.selectbox("Minuti Fine", options=list(range(0, 60)), index=m_def_f if m_def_f in range(0, 60) else 0)
+
+                mod_orario_i_str = f"{mod_ora_i:02d}:{mod_min_i:02d}"
+                mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
+                mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
+
+                # Gestione Enti
+                enti_esistenti = config.get("enti", []).copy()
+                val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
+                if val_ente_corrente and val_ente_corrente not in enti_esistenti:
+                    enti_esistenti.append(val_ente_corrente)
+                idx_ente = enti_esistenti.index(val_ente_corrente) if val_ente_corrente in enti_esistenti else 0
+                mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
+                mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
+
+                # Gestione Classi
+                classi_esistenti = config.get("classi", []).copy()
+                val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
+                if val_classe_corrente and val_classe_corrente not in classi_esistenti:
+                    classi_esistenti.append(val_classe_corrente)
+                idx_classe = classi_esistenti.index(val_classe_corrente) if val_classe_corrente in classi_esistenti else 0
+                mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
+                mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
+
+                # Gestione Sedi
+                sedi_esistenti = config.get("sedi", []).copy()
+                val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
+                if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
+                    sedi_esistenti.append(val_sede_corrente)
+                idx_sede = sedi_esistenti.index(val_sede_corrente) if val_sede_corrente in sedi_esistenti else 0
+                mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
+                mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
+
+                # Gestione Modalità
+                modalita_esistenti = config.get("modalita", []).copy()
+                val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
+                if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
+                    modalita_esistenti.append(val_mod_corrente)
+                idx_mod = modalita_esistenti.index(val_mod_corrente) if val_mod_corrente in modalita_esistenti else 0
+                mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
+                mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
+                
+                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
+                
+                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+                minuti_scelti_mod = attuale_minuti
+
+                svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
+                mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
+
+                escluso_corrente = bool(riga_corrente["Escludi_Conteggio"]) if "Escludi_Conteggio" in riga_corrente else False
+                mod_escluso = st.checkbox("Escludi dal conteggio ore", value=escluso_corrente)
+                
+                mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
+                
+                # Modifica del testo inserito per il multi-impegno (richiesta specifica)
+                attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
+                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+
+                if st.form_submit_button("Salva Modifiche", use_container_width=True):
+                    if mod_orario_i_str >= mod_orario_f_str:
+                        st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
+                    else:
+                        val_ente_finale = mod_ente_libero.strip() if mod_ente_libero else mod_ente_sel
+                        val_classe_finale = mod_classe_libera.strip() if mod_classe_libera else mod_classe_sel
+                        val_sede_finale = mod_sede_libera.strip() if mod_sede_libera else mod_sede_sel
+                        val_modalita_finale = mod_modalita_libera.strip() if mod_modalita_libera else mod_modalita_sel
+
+                        if mod_ente_libero and mod_ente_libero not in config["enti"]:
+                            config["enti"].append(mod_ente_libero)
+                        if mod_classe_libera and mod_classe_libera not in config["classi"]:
+                            config["classi"].append(mod_classe_libera)
+                        if mod_sede_libera and mod_sede_libera not in config["sedi"]:
+                            config["sedi"].append(mod_sede_libera)
+                        if mod_modalita_libera and mod_modalita_libera not in config["modalita"]:
+                            config["modalita"].append(mod_modalita_libera)
+                        salva_config(config)
+
+                        df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
+                        df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
+                        df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
+                        df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
+                        df.loc[riga_idx, "Ore"] = mod_ore_calc
+                        df.loc[riga_idx, "Ente"] = val_ente_finale
+                        df.loc[riga_idx, "Classe"] = val_classe_finale
+                        df.loc[riga_idx, "Sede"] = val_sede_finale
+                        df.loc[riga_idx, "Modalità"] = val_modalita_finale
+                        df.loc[riga_idx, "Svolto"] = mod_svolto
+                        df.loc[riga_idx, "Escludi_Conteggio"] = mod_escluso
+                        df.loc[riga_idx, "Note"] = mod_note
+                        df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo
+                        df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
+
+                        dati_evento = {
+                            "Data": mod_data.strftime("%Y-%m-%d"),
+                            "Orario Inizio": mod_orario_i_str,
+                            "Orario Fine": mod_orario_f_str,
+                            "Ente": val_ente_finale,
+                            "Classe": val_classe_finale,
+                            "Sede": val_sede_finale,
+                            "Modalità": val_modalita_finale,
+                            "Note": mod_note,
+                            "Appunto_Multiplo": mod_appunto_multiplo,
+                            "Reminder_Minuti": minuti_scelti_mod
+                        }
+
+                        cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
+                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                            res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
+                            df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                        else:
+                            cal_id = sincronizza_google_calendar("crea", dati_evento)
+                            df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+
+                        salva_dati(df)
+                        st.success("Modifiche salvate e calendario aggiornato!")
+                        st.rerun()
+
+        st.markdown("---")
+        st.subheader("Generazione Report, Ricerca & Ordinamento")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -1131,6 +1226,21 @@ with tab3:
             modalita_disponibili = ["Tutti"] + sorted(df["Modalità"].dropna().unique().tolist())
             filtro_modalita = st.selectbox("Filtra per Modalità", options=modalita_disponibili)
 
+        st.markdown("##### Opzioni di Ordinamento Report")
+        col_ord1, col_ord2 = st.columns(2)
+        with col_ord1:
+            campi_ordinamento = {
+                "Data": "Data_dt",
+                "Ente": "Ente",
+                "Classe": "Classe",
+                "Sede": "Sede",
+                "Tipologia / Modalità": "Modalità"
+            }
+            scelta_ordinamento = st.selectbox("Ordina per", options=list(campi_ordinamento.keys()))
+        with col_ord2:
+            direzione_ordinamento = st.radio("Direzione", options=["Crescente (A-Z / Dal più vecchio)", "Decrescente (Z-A / Dal più recente)"], horizontal=True)
+        crescente = "Crescente" in direzione_ordinamento
+
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
             df_report["Data_dt"] = df_report["Data"].apply(parse_data_italiana)
@@ -1150,8 +1260,75 @@ with tab3:
         if filtro_modalita != "Tutti":
             df_report = df_report[df_report["Modalità"] == filtro_modalita]
 
+        if ricerca_libera:
+            termini = [t.strip() for t in ricerca_libera.split(",") if t.strip()]
+            if termini:
+                def match_multipli(row):
+                    riga_str = " ".join(row.astype(str).values).lower()
+                    return any(termine.lower() in riga_str for termine in termini)
+                df_report = df_report[df_report.apply(match_multipli, axis=1)]
+
+        colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
+        if colonna_ordinamento in df_report.columns:
+            if colonna_ordinamento == "Data_dt":
+                df_report = df_report.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[crescente, True])
+            else:
+                df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
+
         ore_totali = df_report[df_report["Escludi_Conteggio"] != True]["Ore"].sum()
-        st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività | **Totale Ore Report:** **{ore_totali:.2f} ore**")
+
+        st.success(f"**Risultati Report Filtrati:** {len(df_report)} attività trovate | **Totale Ore Report (escluse quelle flaggate):** **{ore_totali:.2f} ore**")
+
+        if not df_report.empty:
+            st.markdown("---")
+            st.markdown("### Elenco Attività in Evidenza")
+
+            for _, row in df_report.iterrows():
+                parsed_dt = parse_data_italiana(row["Data"])
+                data_formattata = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row["Data"])
+                ente = str(row.get("Ente", ""))
+                classe = str(row["Classe"])
+                sede = str(row["Sede"])
+                modalita = str(row["Modalità"])
+                orario_i = str(row["Orario Inizio"])
+                orario_f = str(row["Orario Fine"])
+                ore_val = row["Ore"]
+                svolto_card = bool(row["Svolto"]) if "Svolto" in row else False
+                escluso_card = bool(row["Escludi_Conteggio"]) if "Escludi_Conteggio" in row else False
+                note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
+                appunto_mult = str(row.get("Appunto_Multiplo", "")) if pd.notnull(row.get("Appunto_Multiplo", "")) else ""
+
+                if svolto_card:
+                    bg_color = "#2b2b2b"
+                    border_color = "#444444"
+                    text_style = "color: #7f7f7f; text-decoration: line-through;"
+                else:
+                    mod_lower = modalita.lower()
+                    if "presenza" in mod_lower:
+                        bg_color = "#1c3d73"
+                        border_color = "#3b73c4"
+                    elif "video" in mod_lower:
+                        bg_color = "#155c32"
+                        border_color = "#2fa866"
+                    else:
+                        bg_color = "#262626"
+                        border_color = "#555555"
+                    text_style = "color: #ffffff;"
+
+                badge_escluso = " | <span style='color: #ff9999;'>[Escluso conteggio]</span>" if escluso_card else ""
+                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
+
+                st.markdown(
+                    f"""
+                    <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
+                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h){badge_escluso}<br>
+                        <strong>Ente:</strong> {ente if ente else 'N/D'} | <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
+                        <em>Note:</em> {note if note else 'Nessuna nota'}
+                        {multiplo_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
         st.markdown("---")
         c_exp1, c_exp2, c_exp3, c_exp4 = st.columns(4)
@@ -1159,22 +1336,51 @@ with tab3:
         with c_exp1:
             df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
             csv_data = df_export.to_csv(index=False).encode('utf-8')
-            st.download_button("Scarica Report CSV", data=csv_data, file_name="report_attivita.csv", mime="text/csv", use_container_width=True)
+            st.download_button(
+                label="Scarica Report CSV",
+                data=csv_data,
+                file_name="report_attivita.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
         with c_exp2:
             buffer_excel = io.BytesIO()
             with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False, sheet_name='Report')
+                
+                worksheet = writer.sheets['Report']
+                for i, col in enumerate(df_export.columns):
+                    lunghezza_massima = max(
+                        df_export[col].astype(str).map(len).max(),
+                        len(str(col))
+                    )
+                    worksheet.set_column(i, i, max(lunghezza_massima + 3, 12))
+                    
             buffer_excel.seek(0)
-            st.download_button("Scarica Excel", data=buffer_excel, file_name="report_attivita.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            st.download_button(
+                label="Scarica Excel (Report)",
+                data=buffer_excel,
+                file_name="report_attivita.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 
         with c_exp3:
             pdf_data = genera_pdf_report(df_report)
             if pdf_data:
-                st.download_button("Scarica Report PDF", data=pdf_data, file_name="report_attivita.pdf", mime="application/pdf", use_container_width=True)
+                st.download_button(
+                    label="Scarica Report PDF",
+                    data=pdf_data,
+                    file_name="report_attivita.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.button("PDF non disponibile", disabled=True, use_container_width=True, help="Installa reportlab per abilitare l'esportazione PDF")
 
         with c_exp4:
-            if st.button("Sincronizza eventi mancanti", use_container_width=True):
+            if st.button("Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
                 count_sinc = 0
                 for idx, row in df.iterrows():
                     cal_id = str(row.get("Calendar_ID", ""))
@@ -1188,7 +1394,8 @@ with tab3:
                             "Sede": str(row.get("Sede", "")),
                             "Modalità": str(row.get("Modalità", "")),
                             "Note": str(row.get("Note", "")),
-                            "Reminder_Minuti": 240
+                            "Appunto_Multiplo": str(row.get("Appunto_Multiplo", "")),
+                            "Reminder_Minuti": int(row.get("Reminder_Minuti", 240))
                         }
                         nuovo_id = sincronizza_google_calendar("crea", dati_evento)
                         if nuovo_id:
@@ -1196,7 +1403,10 @@ with tab3:
                             count_sinc += 1
                 if count_sinc > 0:
                     salva_dati(df)
+                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
                     st.rerun()
+                else:
+                    st.info("Tutti gli eventi risultano già sincronizzati.")
 
 # ================= TAB 4: CALENDARIO =================
 with tab4:
@@ -1274,6 +1484,7 @@ with tab4:
     import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
+
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
     
     impegni_per_giorno = {}
@@ -1283,99 +1494,66 @@ with tab4:
             if giorno_num not in impegni_per_giorno:
                 impegni_per_giorno[giorno_num] = []
             
+            ente_str = str(row.get("Ente", ""))
+            classe_str = str(row.get("Classe", ""))
+            orario_i = str(row.get("Orario Inizio", ""))
+            orario_f = str(row.get("Orario Fine", ""))
+            sede_str = str(row.get("Sede", ""))
+            mod_str = str(row.get("Modalità", ""))
+            ore_val = row.get("Ore", 0.0)
+            note_str = str(row.get("Note", ""))
+            appunto_mult_str = str(row.get("Appunto_Multiplo", ""))
+            svolto_val = bool(row.get("Svolto", False))
+            escluso_val = bool(row.get("Escludi_Conteggio", False))
+
             impegni_per_giorno[giorno_num].append({
-                "ente": str(row.get("Ente", "")).strip(),
-                "classe": str(row.get("Classe", "")).strip(),
-                "orario": f"{str(row.get('Orario Inizio', '')).strip()} - {str(row.get('Orario Fine', '')).strip()}",
-                "ore": row.get("Ore", 0.0),
-                "sede": str(row.get("Sede", "")).strip(),
-                "modalita": str(row.get("Modalità", "")).strip(),
-                "note": str(row.get("Note", "")).strip(),
-                "svolto": bool(row.get("Svolto", False)),
-                "escluso": bool(row.get("Escludi_Conteggio", False))
+                "ente": ente_str,
+                "classe": classe_str,
+                "orario": f"{orario_i} - {orario_f}",
+                "ore": ore_val,
+                "sede": sede_str,
+                "modalita": mod_str,
+                "note": note_str,
+                "appunto_multiplo": appunto_mult_str,
+                "svolto": svolto_val,
+                "escluso": escluso_val
             })
 
-    html_righe = ""
-    for settimana in giorni_mese:
-        html_righe += "<tr>"
-        for giorno in settimana:
-            if giorno == 0:
-                html_righe += '<td class="cal-cell-empty"></td>'
-            else:
-                ha_impegni = giorno in impegni_per_giorno
-                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
-                
-                html_righe += f'<td class="cal-cell" style="{bg_style}">'
-                html_righe += f'<div class="day-number">{giorno}</div>'
-
-                if ha_impegni:
-                    lista_imp = impegni_per_giorno[giorno]
-                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b><br>"
-                    for imp in lista_imp:
-                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
-                        escl_nota = " [Escluso]" if imp["escluso"] else ""
-                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
-                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
-                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
-                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})<br>"
-                        if imp['note']:
-                            dettaglio_html += f"<em>Note:</em> {imp['note']}"
-                        dettaglio_html += "</div>"
-
-                    # Pulizia da caratteri non-breaking spaces ed apici pericolosi nelle note
-                    dettaglio_html_pulito = dettaglio_html.replace('"', '&quot;').replace('\xa0', ' ')
-
-                    html_righe += '<div class="tooltip-container">'
-                    if len(lista_imp) == 1:
-                        imp_singolo = lista_imp[0]
-                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
-                        html_righe += f'<span class="badge-impegno">{testo_badge}</span>'
-                    else:
-                        html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
-                    
-                    html_righe += f'<div class="tooltip-content">{dettaglio_html_pulito}</div>'
-                    html_righe += '</div>'
-
-                html_righe += '</td>'
-        html_righe += "</tr>"
-
-    th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
-
-    tuo_codice_html_tabella = f"""
+    html_cal = """
     <style>
-      .cal-table {{
+      .cal-table {
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-      }}
-      .cal-th {{
+      }
+      .cal-th {
         background-color: #1c3d73;
         color: white;
         text-align: center;
         padding: 10px;
         font-size: 14px;
         border: 1px solid #333333;
-      }}
-      .cal-cell {{
+      }
+      .cal-cell {
         height: 90px;
         vertical-align: top;
         padding: 6px;
         border: 1px solid #444444;
         background-color: #1e1e1e;
         position: relative;
-      }}
-      .cal-cell-empty {{
+      }
+      .cal-cell-empty {
         background-color: #121212;
         border: 1px solid #2a2a2a;
         height: 90px;
-      }}
-      .day-number {{
+      }
+      .day-number {
         font-weight: bold;
         font-size: 13px;
         color: #ffffff;
         margin-bottom: 4px;
-      }}
-      .badge-impegno {{
+      }
+      .badge-impegno {
         background-color: #2fa866;
         color: white;
         font-size: 11px;
@@ -1386,8 +1564,8 @@ with tab4:
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-      }}
-      .badge-impegno-multi {{
+      }
+      .badge-impegno-multi {
         background-color: #c0392b;
         color: white;
         font-size: 11px;
@@ -1397,13 +1575,13 @@ with tab4:
         margin-bottom: 2px;
         text-align: center;
         font-weight: bold;
-      }}
-      .tooltip-container {{
+      }
+      .tooltip-container {
         position: relative;
         display: block;
         cursor: pointer;
-      }}
-      .tooltip-content {{
+      }
+      .tooltip-content {
         visibility: hidden;
         width: 260px;
         background-color: #2c3e50;
@@ -1421,16 +1599,62 @@ with tab4:
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         font-size: 12px;
         line-height: 1.4;
-      }}
-      .tooltip-container:hover .tooltip-content {{
+      }
+      .tooltip-container:hover .tooltip-content {
         visibility: visible;
         opacity: 1;
-      }}
+      }
     </style>
     <table class="cal-table">
-      <tr>{th_html}</tr>
-      {html_righe}
-    </table>
+      <tr>
     """
 
-    st.markdown(tuo_codice_html_tabella, unsafe_allow_html=True)
+    for g_s in giorni_settimana:
+        html_cal += f'<th class="cal-th">{g_s}</th>'
+    html_cal += "</tr>"
+
+    for settimana in giorni_mese:
+        html_cal += "<tr>"
+        for giorno in settimana:
+            if giorno == 0:
+                html_cal += '<td class="cal-cell-empty"></td>'
+            else:
+                ha_impegni = giorno in impegni_per_giorno
+                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
+                
+                html_cal += f'<td class="cal-cell" style="{bg_style}">'
+                html_cal += f'<div class="day-number">{giorno}</div>'
+
+                if ha_impegni:
+                    lista_imp = impegni_per_giorno[giorno]
+                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b><hr style='margin: 4px 0; border-color: #444;'>"
+                    for imp in lista_imp:
+                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
+                        escl_nota = " [Escluso]" if imp["escluso"] else ""
+                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
+                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
+                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
+                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})<br>"
+                        if imp['note']:
+                            dettaglio_html += f"<em>Note:</em> {imp['note']}<br>"
+                        if imp['appunto_multiplo']:
+                            dettaglio_html += f"<em>Multi-impegno:</em> {imp['appunto_multiplo']}"
+                        dettaglio_html += "</div>"
+
+                    html_cal += f'<div class="tooltip-container">'
+                    if len(lista_imp) == 1:
+                        imp_singolo = lista_imp[0]
+                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
+                        html_cal += f'<span class="badge-impegno">{testo_badge}</span>'
+                    else:
+                        html_cal += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
+                    
+                    html_cal += f'<div class="tooltip-content">{dettaglio_html}</div>'
+                    html_cal += '</div>'
+
+                html_cal += '</td>'
+        html_cal += "</tr>"
+
+    html_cal += "</table>"
+
+    st.markdown(html_cal, unsafe_allow_html=True)
