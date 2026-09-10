@@ -764,7 +764,7 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # 8 righe condizionali per Inserimento Multiplo (menu a tendina orari più compatti e più spazio al testo)
+        # 8 righe condizionali per Inserimento Multiplo (orari 00:00-00:00 con ore 0-23 e minuti 0-59 e testo accanto)
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
@@ -774,7 +774,7 @@ with tab1:
             righe_multiplo_lista = []
             for i in range(8):
                 st.markdown(f"**Riga {i+1}**")
-                rc1, rc2, rc3, rc4, rc5 = st.columns([0.6, 0.6, 0.6, 0.6, 5.6])
+                rc1, rc2, rc3, rc4, rc5 = st.columns([0.7, 0.7, 0.7, 0.7, 6])
                 with rc1:
                     m_ora_i = st.selectbox(f"Da Ora {i+1}", options=list(range(0, 24)), index=0, key=f"m_ora_i_{i}")
                 with rc2:
