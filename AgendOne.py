@@ -842,7 +842,7 @@ with tab1:
                         break
 
                     orari_inizi.append(oi)
-orari_fini.append(of)
+                    orari_fini.append(of)
                     ore_calc = calcola_ore(oi, of)
                     sv = st.session_state.get(f"m_sv_{idx}", False)
                     esc = st.session_state.get(f"m_esc_{idx}", False)
