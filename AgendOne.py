@@ -172,6 +172,17 @@ st.markdown(
       margin: 0;
     }
 
+    /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
+    /* Modifica larghezze specifiche per le intestazioni e celle dell'archivio */
+    div[data-testid="stDataEditor"] th div[title*="Orario"],
+    div[data-testid="stDataEditor"] th div[title*="Selezione"],
+    div[data-testid="stDataEditor"] th div[title*="Svolto"],
+    div[data-testid="stDataEditor"] th div[title*="Escludi"] {
+        white-space: pre-wrap !important;
+        font-size: 11px !important;
+        line-height: 1.1 !important;
+    }
+
     /* ========================================================== */
     /* OTTIMIZZAZIONI SPECIFICHE PER SMARTPHONE (Schermi stretti) */
     /* ========================================================== */
@@ -1007,9 +1018,13 @@ with tab3:
         if filtro:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
-        df_mostra.insert(0, "Seleziona", False)
+        df_mostra.insert(0, "Selezione", False)
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
+
+        # Rimozione/esclusione delle colonne richieste dalla visualizzazione dell'archivio (ID, Codice_univoco, Mese)
+        colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
+        df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
         def colora_righe_tabella(row):
             svolto = row.get("Svolto", False)
@@ -1022,38 +1037,19 @@ with tab3:
                 return ['background-color: #155c32; color: #ffffff'] * len(row)
             return [''] * len(row)
 
-        df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
+        df_styled = df_mostra_visibile.style.apply(colora_righe_tabella, axis=1)
 
         df_editato = st.data_editor(
             df_styled,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Seleziona": st.column_config.CheckboxColumn(
-                    "Seleziona",
-                    help="Seleziona riga",
-                    width="small"
-                ),
-                "ID": st.column_config.NumberColumn(disabled=True, width="small"),
-                "Orario Inizio": st.column_config.TextColumn(
-                    "Orario Inizio",
-                    width="small"
-                ),
-                "Orario Fine": st.column_config.TextColumn(
-                    "Orario Fine",
-                    width="small"
-                ),
-                "Svolto": st.column_config.CheckboxColumn(
-                    "Svolto",
-                    help="Seleziona svolto",
-                    width="small"
-                ),
-                "Escludi_Conteggio": st.column_config.CheckboxColumn(
-                    "Escludi<br>conteggio",
-                    help="Escludi conteggio",
-                    width="small"
-                ),
-                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
+                "Selezione": st.column_config.CheckboxColumn("Sel.", required=True, width="small"),
+                "Svolto": st.column_config.CheckboxColumn("Svolto", required=True, width="small"),
+                "Escludi_Conteggio": st.column_config.CheckboxColumn("Escludi\nConteggio", required=True, width="small"),
+                "Orario Inizio": st.column_config.TextColumn("Orario\nInizio", width="small"),
+                "Orario Fine": st.column_config.TextColumn("Orario\nFine", width="small"),
+                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True, width="small"),
             }
         )
 
@@ -1062,7 +1058,7 @@ with tab3:
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
-            idx_orig = int(riga_ed["ID"])
+            idx_orig = int(riga_ed["ID"]) if "ID" in df_editato.columns else int(df_mostra[df_mostra.index == riga_ed.name]["ID"].values[0])
             val_nuovo_svolto = bool(riga_ed["Svolto"])
             val_nuovo_escluso = bool(riga_ed["Escludi_Conteggio"])
             if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
@@ -1073,7 +1069,7 @@ with tab3:
             salva_dati(df)
             st.rerun()
 
-        righe_selezionate = df_editato[df_editato["Seleziona"] == True]["ID"].tolist()
+        righe_selezionate = df_mostra[df_editato["Selezione"] == True]["ID"].tolist() if "Selezione" in df_editato.columns and "ID" in df_mostra.columns else []
 
         col_act1, col_act2 = st.columns(2)
         with col_act1:
