@@ -1910,30 +1910,28 @@ with tab4:
                     for imp in lista_imp:
                         escl_txt = " [ESCLUSO]" if imp['escluso'] else ""
                         svolt_txt = " [SVOLTO]" if imp['svolto'] else ""
-                        dettaglio_html += f"• <b>{imp['orario']}</b> - {imp['ente']} | {imp['classe']}{svolt_txt}{escl_txt}<br><small>Sede: {imp['sede']} ({imp['modalita']}) - Ore: {imp['ore']:.2f}h</small><br>"
-
-                    dettaglio_html_clean = dettaglio_html.replace('"', '&quot;')
+                        dettaglio_html += f"<br>• <b>{imp['orario']}</b> - [{imp['ente']}] {imp['classe']} ({imp['modalita']}){escl_txt}{svolt_txt}"
+                        if imp['note']:
+                            dettaglio_html += f"<br><i>Note: {imp['note']}</i>"
 
                     if len(lista_imp) == 1:
-                        imp_singolo = lista_imp[0]
-                        badge_txt = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
-                        html_cal += f'''
-                        <div class="tooltip-container">
-                            <span class="badge-impegno">{badge_txt}</span>
-                            <div class="tooltip-content">{dettaglio_html_clean}</div>
-                        </div>
-                        '''
+                        imp0 = lista_imp[0]
+                        label = f"{imp0['orario']} {imp0['classe']}"
+                        badge_class = "badge-impegno"
                     else:
-                        badge_txt = f"🔴 {len(lista_imp)} Impegni"
-                        html_cal += f'''
-                        <div class="tooltip-container">
-                            <span class="badge-impegno-multi">{badge_txt}</span>
-                            <div class="tooltip-content">{dettaglio_html_clean}</div>
-                        </div>
-                        '''
-                html_cal += "</td>"
-        html_cal += "</tr>"
+                        label = f"🔴 {len(lista_imp)} Impegni"
+                        badge_class = "badge-impegno-multi"
 
-    html_cal += "</table>"
+                    html_cal += f"""
+                    <div class="tooltip-container">
+                        <span class="{badge_class}">{label}</span>
+                        <div class="tooltip-content">
+                            {dettaglio_html}
+                        </div>
+                    </div>
+                    """
+                html_cal += '</td>'
+        html_cal += '</tr>'
+    html_cal += '</table>'
 
     st.markdown(html_cal, unsafe_allow_html=True)
