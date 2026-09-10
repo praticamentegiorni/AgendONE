@@ -1,4 +1,3 @@
-name=AgendOne_3.py
 import datetime
 import io
 import json
