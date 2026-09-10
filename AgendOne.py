@@ -1198,7 +1198,7 @@ with tab3:
                     salva_dati(df)
                     st.rerun()
 
-# ================= TAB 4: CALENDARIO (CORRETTO) =================
+# ================= TAB 4: CALENDARIO =================
 with tab4:
     st.subheader("Vista Calendario Mensile")
     
@@ -1284,18 +1284,17 @@ with tab4:
                 impegni_per_giorno[giorno_num] = []
             
             impegni_per_giorno[giorno_num].append({
-                "ente": str(row.get("Ente", "")),
-                "classe": str(row.get("Classe", "")),
-                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
+                "ente": str(row.get("Ente", "")).strip(),
+                "classe": str(row.get("Classe", "")).strip(),
+                "orario": f"{str(row.get('Orario Inizio', '')).strip()} - {str(row.get('Orario Fine', '')).strip()}",
                 "ore": row.get("Ore", 0.0),
-                "sede": str(row.get("Sede", "")),
-                "modalita": str(row.get("Modalità", "")),
-                "note": str(row.get("Note", "")),
+                "sede": str(row.get("Sede", "")).strip(),
+                "modalita": str(row.get("Modalità", "")).strip(),
+                "note": str(row.get("Note", "")).strip(),
                 "svolto": bool(row.get("Svolto", False)),
                 "escluso": bool(row.get("Escludi_Conteggio", False))
             })
 
-    # Generazione pulita dell'HTML della tabella per evitare errori di rendering stringa
     html_righe = ""
     for settimana in giorni_mese:
         html_righe += "<tr>"
@@ -1323,6 +1322,9 @@ with tab4:
                             dettaglio_html += f"<em>Note:</em> {imp['note']}"
                         dettaglio_html += "</div>"
 
+                    # Pulizia da caratteri non-breaking spaces ed apici pericolosi nelle note
+                    dettaglio_html_pulito = dettaglio_html.replace('"', '&quot;').replace('\xa0', ' ')
+
                     html_righe += '<div class="tooltip-container">'
                     if len(lista_imp) == 1:
                         imp_singolo = lista_imp[0]
@@ -1331,7 +1333,7 @@ with tab4:
                     else:
                         html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
                     
-                    html_righe += f'<div class="tooltip-content">{dettaglio_html}</div>'
+                    html_righe += f'<div class="tooltip-content">{dettaglio_html_pulito}</div>'
                     html_righe += '</div>'
 
                 html_righe += '</td>'
