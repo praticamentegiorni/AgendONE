@@ -1029,10 +1029,30 @@ with tab3:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Seleziona": st.column_config.CheckboxColumn(required=True),
-                "ID": st.column_config.NumberColumn(disabled=True),
-                "Svolto": st.column_config.CheckboxColumn(required=True),
-                "Escludi_Conteggio": st.column_config.CheckboxColumn(required=True),
+                "Seleziona": st.column_config.CheckboxColumn(
+                    "Seleziona",
+                    help="Seleziona riga",
+                    width="small"
+                ),
+                "ID": st.column_config.NumberColumn(disabled=True, width="small"),
+                "Orario Inizio": st.column_config.TextColumn(
+                    "Orario Inizio",
+                    width="small"
+                ),
+                "Orario Fine": st.column_config.TextColumn(
+                    "Orario Fine",
+                    width="small"
+                ),
+                "Svolto": st.column_config.CheckboxColumn(
+                    "Svolto",
+                    help="Seleziona svolto",
+                    width="small"
+                ),
+                "Escludi_Conteggio": st.column_config.CheckboxColumn(
+                    "Escludi<br>conteggio",
+                    help="Escludi conteggio",
+                    width="small"
+                ),
                 "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
             }
         )
