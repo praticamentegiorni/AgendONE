@@ -1,8 +1,8 @@
+#[cite: 3]
 import datetime
 import io
 import json
 import os
-import re
 import pandas as pd
 import streamlit as st
 
@@ -237,31 +237,6 @@ def calcola_ore(ora_inizio, ora_fine):
     diff = (datetime.datetime.combine(datetime.date.min, t_f.time()) - 
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
-
-# Funzione per validare che ogni riga inizi con il formato HH:MM-HH:MM (0-23 ore, 0-59 minuti)
-def valida_formato_righe_testo(testo):
-    if not testo or not str(testo).strip():
-        return True, ""
-    
-    righe = str(testo).split("\n")
-    pattern = re.compile(r'^([0-1]?[0-9]|2[0-3]):([0-5][0-9])-([0-1]?[0-9]|2[0-3]):([0-5][0-9])')
-    
-    for idx, riga in enumerate(righe, start=1):
-        riga_pulita = riga.strip()
-        if not riga_pulita:
-            continue
-        match = pattern.match(riga_pulita)
-        if not match:
-            return False, f"Errore alla riga {idx}: '{riga}' non rispetta il formato obbligatorio iniziale '00:00-00:00' (ore 0-23, minuti 0-59)."
-        
-        # Controllo validità logica orario (inizio < fine)
-        h_i, m_i, h_f, m_f = map(int, match.groups())
-        minuti_inizio = h_i * 60 + m_i
-        minuti_fine = h_f * 60 + m_f
-        if minuti_inizio >= minuti_fine:
-            return False, f"Errore alla riga {idx}: L'orario di inizio non può essere successivo o uguale all'orario di fine nel testo inserito."
-            
-    return True, ""
 
 # Funzione per generare il Report PDF raggruppato per Ente e Classe
 def genera_pdf_report(df_report):
@@ -732,9 +707,6 @@ opzioni_promemoria = {
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
     st.subheader("Registrazione Nuova Attività")
-    
-    # Flag per inserimento Normale o Multiplo
-    tipo_inserimento = st.radio("Seleziona modalità di inserimento:", options=["Inserimento Normale", "Inserimento Multiplo"], horizontal=True)
 
     with st.form("form_orario", clear_on_submit=True):
         col_d1, col_d2 = st.columns(2)
@@ -744,7 +716,7 @@ with tab1:
         with col_d2:
             st.info(f"Mese di riferimento: **{mese_str}**")
 
-        st.markdown("**Selezione Orario**")
+        st.markdown("**Selezione Orario Principale**")
         col_o1, col_o2, col_o3, col_o4 = st.columns(4)
         with col_o1:
             ora_i = st.selectbox("Ora Inizio", options=list(range(0, 24)), index=9)
@@ -790,37 +762,47 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # Casella testo aggiuntiva condizionale per inserimento multiplo con obbligo formato orario
-        appunto_multiplo = ""
-        if tipo_inserimento == "Inserimento Multiplo":
-            st.markdown("---")
-            st.markdown("### Sezione Inserimento Multiplo Appuntamenti")
-            st.info("Ogni riga **deve** iniziare obbligatoriamente con il formato orario `HH:MM-HH:MM` (es. `08:30-12:30 Testo...`), con ore da 0 a 23 e minuti da 0 a 59.")
-            appunto_multiplo = st.text_area(
-                "Testo Appuntamenti Multipli (obbligatorio formato orario iniziale per riga)",
-                placeholder="08:30-10:30 Prima attività...\n11:00-13:00 Seconda attività...",
-                height=150,
-                key="textarea_multiplo"
-            )
+        # 8 Righe per orari (00:00-00:00) e testo associato
+        st.markdown("---")
+        st.markdown("### Dettaglio Orari e Testi (8 Righe)")
+        
+        hc1, hc2, hc3, hc4, hc5 = st.columns([1.2, 1.2, 1.2, 1.2, 4])
+        with hc1: st.markdown("**Da Ora**")
+        with hc2: st.markdown("**Da Min**")
+        with hc3: st.markdown("**A Ora**")
+        with hc4: st.markdown("**A Min**")
+        with hc5: st.markdown("**Testo**")
 
-        submit_button_label = "Salva Inserimento Multiplo" if tipo_inserimento == "Inserimento Multiplo" else "Salva Attività"
-        submit_button = st.form_submit_button(label=submit_button_label, use_container_width=True)
+        appunti_righe = []
+        for i in range(1, 9):
+            rc1, rc2, rc3, rc4, rc5 = st.columns([1.2, 1.2, 1.2, 1.2, 4])
+            with rc1:
+                hi = st.selectbox(f"Da Ora {i}", list(range(24)), index=0, key=f"ins_hi_{i}", label_visibility="collapsed")
+            with rc2:
+                mi = st.selectbox(f"Da Min {i}", list(range(60)), index=0, key=f"ins_mi_{i}", label_visibility="collapsed")
+            with rc3:
+                hf = st.selectbox(f"A Ora {i}", list(range(24)), index=0, key=f"ins_hf_{i}", label_visibility="collapsed")
+            with rc4:
+                mf = st.selectbox(f"A Min {i}", list(range(60)), index=0, key=f"ins_mf_{i}", label_visibility="collapsed")
+            with rc5:
+                txt = st.text_input(f"Testo {i}", placeholder=f"Testo riga {i} (es. 12:20 - 15:28)...", key=f"ins_txt_{i}", label_visibility="collapsed")
+            
+            if txt.strip():
+                ora_i_r = f"{hi:02d}:{mi:02d}"
+                ora_f_r = f"{hf:02d}:{mf:02d}"
+                appunti_righe.append(f"{ora_i_r}-{ora_f_r} {txt.strip()}")
+
+        appunto_multiplo = "\n".join(appunti_righe)
+
+        submit_button = st.form_submit_button(label="Salva Attività", use_container_width=True)
 
         if submit_button:
-            # Validazione formato casella multipla se attiva
-            formato_valido = True
-            messaggio_errore_formato = ""
-            if tipo_inserimento == "Inserimento Multiplo":
-                formato_valido, messaggio_errore_formato = valida_formato_righe_testo(appunto_multiplo)
-
-            if not formato_valido:
-                st.error(messaggio_errore_formato)
-            elif orario_inizio_str >= orario_fine_str:
+            if orario_inizio_str >= orario_fine_str:
                 st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
             else:
                 val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
                 val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
+                val_sede = nuova_sede_libera.strip() if nueva_sede_libera else sede if 'nuova_sede_libera' in locals() else sede
                 val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
                 if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
@@ -833,7 +815,6 @@ with tab1:
                     config["modalita"].append(nuovo_mod_libero)
                 salva_config(config)
 
-                # Generazione codice univoco composto da data (DDMMYYYY) + ora (HH:MM:SS)
                 now_ts = datetime.datetime.now()
                 codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
 
@@ -1173,17 +1154,40 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
                 
-                # Modifica del testo inserito per il multi-impegno con obbligo formato orario
-                attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
-                st.info("Ogni riga del testo multiplo **deve** iniziare obbligatoriamente con il formato orario `HH:MM-HH:MM` (0-23 ore, 0-59 minuti).")
-                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+                # 8 Righe per la modifica degli orari e testi multipli
+                st.markdown("---")
+                st.markdown("### Modifica Dettaglio Orari e Testi (8 Righe)")
+                
+                mhc1, mhc2, mhc3, mhc4, mhc5 = st.columns([1.2, 1.2, 1.2, 1.2, 4])
+                with mhc1: st.markdown("**Da Ora**")
+                with mhc2: st.markdown("**Da Min**")
+                with mhc3: st.markdown("**A Ora**")
+                with mhc4: st.markdown("**A Min**")
+                with mhc5: st.markdown("**Testo**")
+
+                mod_appunti_righe = []
+                for i in range(1, 9):
+                    mrc1, mrc2, mrc3, mrc4, mrc5 = st.columns([1.2, 1.2, 1.2, 1.2, 4])
+                    with mrc1:
+                        mhi = st.selectbox(f"Mod Da Ora {i}", list(range(24)), index=0, key=f"mod_hi_{i}", label_visibility="collapsed")
+                    with mrc2:
+                        mmi = st.selectbox(f"Mod Da Min {i}", list(range(60)), index=0, key=f"mod_mi_{i}", label_visibility="collapsed")
+                    with mrc3:
+                        mhf = st.selectbox(f"Mod A Ora {i}", list(range(24)), index=0, key=f"mod_hf_{i}", label_visibility="collapsed")
+                    with mrc4:
+                        mmf = st.selectbox(f"Mod A Min {i}", list(range(60)), index=0, key=f"mod_mf_{i}", label_visibility="collapsed")
+                    with mrc5:
+                        mtxt = st.text_input(f"Mod Testo {i}", placeholder=f"Testo riga {i}...", key=f"mod_txt_{i}", label_visibility="collapsed")
+                    
+                    if mtxt.strip():
+                        ora_i_r = f"{mhi:02d}:{mmi:02d}"
+                        ora_f_r = f"{mhf:02d}:{mmf:02d}"
+                        mod_appunti_righe.append(f"{ora_i_r}-{ora_f_r} {mtxt.strip()}")
+
+                mod_appunto_multiplo = "\n".join(mod_appunti_righe)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
-                    formato_mod_valido, messaggio_errore_mod = valida_formato_righe_testo(mod_appunto_multiplo)
-
-                    if not formato_mod_valido:
-                        st.error(messaggio_errore_mod)
-                    elif mod_orario_i_str >= mod_orario_f_str:
+                    if mod_orario_i_str >= mod_orario_f_str:
                         st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                     else:
                         val_ente_finale = mod_ente_libero.strip() if mod_ente_libero else mod_ente_sel
@@ -1356,7 +1360,7 @@ with tab3:
                     text_style = "color: #ffffff;"
 
                 badge_escluso = " | <span style='color: #ff9999;'>[Escluso conteggio]</span>" if escluso_card else ""
-                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
+                multiplo_html = f"<br><em>Dettagli Orari/Testi:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
 
                 st.markdown(
                     f"""
@@ -1541,6 +1545,7 @@ with tab4:
                 "sede": str(row.get("Sede", "")),
                 "modalita": str(row.get("Modalità", "")),
                 "note": str(row.get("Note", "")),
+                "appunto_multiplo": str(row.get("Appunto_Multiplo", "")),
                 "svolto": bool(row.get("Svolto", False)),
                 "escluso": bool(row.get("Escludi_Conteggio", False))
             })
@@ -1572,6 +1577,8 @@ with tab4:
                         dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
                         if imp['note']:
                             dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
+                        if imp['appunto_multiplo']:
+                            dettaglio_html += f"<br><em>Dettagli:</em><pre style='font-size:10px; margin:2px 0; white-space:pre-wrap;'>{imp['appunto_multiplo']}</pre>"
                         dettaglio_html += "</div>"
 
                     html_righe += '<div class="tooltip-container">'
