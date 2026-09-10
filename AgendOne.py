@@ -484,7 +484,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             body = {
                 'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
-                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento.get('Note', '')}\nAppunto/Multi-impegno: {dati_evento.get('', '')}\nGestito da AgendOne",
+                'description': f"Ente: {dati_evento.get('Ente', '')}\nNote: {dati_evento.get('Note', '')}\n{dati_evento.get('Appunto_Multiplo', '')}\nGestito da AgendOne",
                 'start': {
                     'dateTime': start_datetime,
                     'timeZone': 'Europe/Rome',
