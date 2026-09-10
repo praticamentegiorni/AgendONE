@@ -351,22 +351,23 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
 
-# Funzione per sincronizzare l'evento su Google Calendar (con debug esteso)
+# Funzione per sincronizzare l'evento su Google Calendar con gestione dettagliata errori
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
-    st.write(f"DEBUG [Calendar] - Azione richiesta: **{azione}** | ID esistente ricevuto: **{evento_id_esistente}**")
-    st.write(f"DEBUG [Calendar] - Dati evento: {dati_evento}")
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
         from googleapiclient.errors import HttpError
 
         gsheets_secrets = st.secrets["connections"]["gsheets"]
+        client_email = gsheets_secrets.get("client_email", "N/D")
+        calendar_id = gsheets_secrets.get("calendar_id", "primary")
+
         creds_dict = {
             "type": gsheets_secrets.get("type", "service_account"),
             "project_id": gsheets_secrets.get("project_id"),
             "private_key_id": gsheets_secrets.get("private_key_id"),
             "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
-            "client_email": gsheets_secrets.get("client_email"),
+            "client_email": client_email,
             "client_id": gsheets_secrets.get("client_id"),
             "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
             "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
@@ -378,9 +379,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
         SCOPES = ['https://www.googleapis.com/auth/calendar']
         credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         service = build('calendar', 'v3', credentials=credentials)
-
-        calendar_id = gsheets_secrets.get("calendar_id", "primary")
-        st.write(f"DEBUG [Calendar] - Target Calendar ID: {calendar_id}")
 
         if evento_id_esistente:
             evento_id_esistente = str(evento_id_esistente).strip()
@@ -419,47 +417,126 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                 },
                 'reminders': reminders_body,
             }
-            st.write(f"DEBUG [Calendar] - Payload (body) preparato: {body}")
 
         if azione == "crea":
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-            new_id = event_result.get('id')
-            st.write(f"DEBUG [Calendar] - Evento creato con successo! ID restituito: {new_id}")
-            return new_id
+            return event_result.get('id')
         elif azione == "aggiorna" and evento_id_esistente:
             try:
                 service.events().update(calendarId=calendar_id, eventId=evento_id_esistente, body=body).execute()
-                st.write(f"DEBUG [Calendar] - Evento aggiornato con successo per ID: {evento_id_esistente}")
                 return evento_id_esistente
             except HttpError as err:
-                st.write(f"DEBUG [Calendar] - Errore HTTP in aggiornamento (Status {err.resp.status}): {err}")
                 if err.resp.status == 404:
-                    st.write("DEBUG [Calendar] - Evento non trovato su Google Calendar (404), procedo con la creazione di un nuovo evento.")
                     event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-                    new_id = event_result.get('id')
-                    st.write(f"DEBUG [Calendar] - Nuovo evento ricreato. ID: {new_id}")
-                    return new_id
+                    return event_result.get('id')
                 else:
                     raise err
         elif azione == "aggiorna" and not evento_id_esistente:
-            st.write("DEBUG [Calendar] - Azione 'aggiorna' senza ID esistente: procedo a creare un nuovo evento.")
             event_result = service.events().insert(calendarId=calendar_id, body=body).execute()
-            new_id = event_result.get('id')
-            st.write(f"DEBUG [Calendar] - Evento creato. ID: {new_id}")
-            return new_id
+            return event_result.get('id')
         elif azione == "elimina" and evento_id_esistente:
             try:
                 service.events().delete(calendarId=calendar_id, eventId=evento_id_esistente).execute()
-                st.write(f"DEBUG [Calendar] - Evento eliminato con successo. ID: {evento_id_esistente}")
             except HttpError as err:
-                st.write(f"DEBUG [Calendar] - Errore HTTP in eliminazione (Status {err.resp.status}): {err}")
                 if err.resp.status != 404:
                     raise err
             return None
-    except Exception as e:
-        st.error(f"Errore di sincronizzazione Google Calendar: {e}")
-        st.exception(e)
+    except HttpError as err:
+        status = err.resp.status
+        if status == 404:
+            st.error(f"❌ **Errore Google Calendar (404 Not Found)**: L'ID Calendario '{calendar_id}' non è stato trovato o non è accessibile.")
+        elif status == 403:
+            st.error(f"❌ **Errore Google Calendar (403 Forbidden)**: Il Service Account `{client_email}` non ha i permessi di modifica sul calendario '{calendar_id}'. Condividi il calendario concedendo 'Apportare modifiche agli eventi'.")
+        else:
+            st.error(f"❌ **Errore API Google Calendar ({status})**: {err}")
         return None
+    except Exception as e:
+        st.error(f"❌ **Errore durante la sincronizzazione Google Calendar**: {e}")
+        return None
+
+# Diagnostica integrata per Google Calendar
+def esegui_diagnostica_calendar():
+    st.markdown("---")
+    st.markdown("### 🔍 Diagnostica & Test Connessione Google Calendar")
+    st.info("Utilizza questo strumento per verificare la configurazione, l'ID Calendario e i permessi del Service Account.")
+
+    try:
+        gsheets_secrets = st.secrets["connections"]["gsheets"]
+        client_email = gsheets_secrets.get("client_email", "NON CONFIGURATO")
+        calendar_id = gsheets_secrets.get("calendar_id", "primary")
+
+        st.markdown(f"- **Account Servizio (client_email):** `{client_email}`")
+        st.markdown(f"- **ID Calendario Impostato (calendar_id):** `{calendar_id}`")
+
+        if calendar_id.lower() == "primary":
+            st.warning("⚠️ **Attenzione**: `calendar_id` nei Secrets è impostato su `'primary'`. Nei Service Account 'primary' è il calendario privato vuoto del bot! Devi specificare l'ID reale del tuo calendario (es. `xxx@group.calendar.google.com`) e condividere il calendario con il Service Account.")
+        elif "@" not in calendar_id:
+            st.warning(f"⚠️ **Attenzione**: `calendar_id` è impostato su `'{calendar_id}'`. Il nome del calendario non è il suo ID! L'ID del calendario ha una struttura simile a `abc123456789@group.calendar.google.com` oppure coincide con il tuo indirizzo email Gmail.")
+
+        col_diag1, col_diag2 = st.columns(2)
+
+        with col_diag1:
+            if st.button("1. Verifica Lettura & Permessi Calendario", use_container_width=True):
+                from google.oauth2 import service_account
+                from googleapiclient.discovery import build
+                from googleapiclient.errors import HttpError
+
+                creds_dict = {
+                    "type": gsheets_secrets.get("type", "service_account"),
+                    "project_id": gsheets_secrets.get("project_id"),
+                    "private_key_id": gsheets_secrets.get("private_key_id"),
+                    "private_key": gsheets_secrets.get("private_key", "").replace("\\n", "\n"),
+                    "client_email": client_email,
+                    "client_id": gsheets_secrets.get("client_id"),
+                    "auth_uri": gsheets_secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+                    "token_uri": gsheets_secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+                    "auth_provider_x509_cert_url": gsheets_secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+                    "client_x509_cert_url": gsheets_secrets.get("client_x509_cert_url"),
+                    "universe_domain": gsheets_secrets.get("universe_domain", "googleapis.com"),
+                }
+                SCOPES = ['https://www.googleapis.com/auth/calendar']
+                credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+                service = build('calendar', 'v3', credentials=credentials)
+
+                try:
+                    cal_meta = service.calendars().get(calendarId=calendar_id).execute()
+                    st.success(f"✅ Connessione riuscita al Calendario!")
+                    st.write(f"- **Nome Reale Calendario:** `{cal_meta.get('summary')}`")
+                    st.write(f"- **Fuso Orario:** `{cal_meta.get('timeZone')}`")
+                    st.write(f"- **ID Reale Confermato:** `{cal_meta.get('id')}`")
+                except HttpError as err:
+                    if err.resp.status == 404:
+                        st.error(f"❌ **Errore 404 Not Found**: L'ID '{calendar_id}' non esiste o il Service Account `{client_email}` non è stato aggiunto tra i condivisi del calendario.")
+                    elif err.resp.status == 403:
+                        st.error(f"❌ **Errore 403 Forbidden**: Il Service Account `{client_email}` non ha i permessi sufficienti per accedere al calendario '{calendar_id}'.")
+                    else:
+                        st.error(f"❌ **Errore HTTP {err.resp.status}**: {err}")
+                except Exception as e:
+                    st.error(f"❌ **Errore Generico**: {e}")
+
+        with col_diag2:
+            if st.button("2. Test Scrittura Evento di Prova", use_container_width=True):
+                test_dati = {
+                    "Data": datetime.date.today().strftime("%Y-%m-%d"),
+                    "Orario Inizio": "12:00",
+                    "Orario Fine": "12:30",
+                    "Ente": "TEST DIAGNOSTICA",
+                    "Classe": "Test Evento",
+                    "Sede": "Online",
+                    "Modalità": "Test",
+                    "Note": "Evento temporaneo generato da AgendOne Diagnostica",
+                    "Reminder_Minuti": 0
+                }
+                res_id = sincronizza_google_calendar("crea", test_dati)
+                if res_id:
+                    st.success(f"✅ Evento di prova creato su Google Calendar! ID: `{res_id}`")
+                    sincronizza_google_calendar("elimina", {}, res_id)
+                    st.info("🗑️ Evento di prova rimosso automaticamente.")
+                else:
+                    st.error("❌ Impossibile creare l'evento di prova. Leggi il dettaglio dell'errore sopra.")
+
+    except Exception as e:
+        st.error(f"Errore nella lettura della configurazione Secrets: {e}")
 
 # Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
 def carica_config():
@@ -750,7 +827,11 @@ with tab1:
 
                     df = pd.concat([df, nuovo_dato], ignore_index=True)
                     salva_dati(df)
-                    st.success("Attività salvata e sincronizzata con Google Calendar!")
+                    
+                    if cal_id:
+                        st.success("Attività salvata su Google Sheets e sincronizzata con Google Calendar!")
+                    else:
+                        st.warning("⚠️ Attività salvata su Google Sheets, MA la sincronizzazione con Google Calendar NON è riuscita. Verifica la sezione diagnostica in Tab 2.")
                     st.rerun()
 
     else:
@@ -861,6 +942,7 @@ with tab1:
                         config["modalita"].append(nuovo_mod_libero_m)
 
                     nuovi_record = []
+                    count_cal_ok = 0
                     for item in st.session_state["lista_sessioni_temp"]:
                         c_val = item["Classe"]
                         if c_val and c_val not in config["classi"]:
@@ -879,6 +961,8 @@ with tab1:
                         }
                         
                         cal_id = sincronizza_google_calendar("crea", dati_evento)
+                        if cal_id:
+                            count_cal_ok += 1
 
                         nuovi_record.append({
                             "Data": data_m.strftime("%Y-%m-%d"),
@@ -903,7 +987,12 @@ with tab1:
                     salva_dati(df)
 
                     st.session_state["lista_sessioni_temp"] = []
-                    st.success("L'intero appuntamento e tutte le classi/orari sono stati salvati e sincronizzati!")
+                    if count_cal_ok == len(nuovi_record):
+                        st.success("L'intero appuntamento è stato salvato su Sheets e sincronizzato su Google Calendar!")
+                    elif count_cal_ok > 0:
+                        st.warning(f"Salvato su Sheets. Sincronizzati su Google Calendar {count_cal_ok} eventi su {len(nuovi_record)}.")
+                    else:
+                        st.warning("⚠️ Salvato su Google Sheets, MA l'integrazione con Google Calendar è fallita. Controlla la diagnostica in Tab 2.")
                     st.rerun()
         else:
             st.info("Nessun inserimento ancora presente. Utilizza il pulsante sopra per aggiungere almeno una classe ed orario.")
@@ -994,6 +1083,9 @@ with tab2:
     with col4:
         gestisci_sezione_combo("Modalità", "modalita")
 
+    # Inclusione della sezione diagnostica Google Calendar
+    esegui_diagnostica_calendar()
+
 # ================= TAB 3: ARCHIVIO, MODIFICA, REPORT & RIEPILOGO =================
 with tab3:
     st.subheader("Storico, Modifica e Gestione Appuntamenti")
@@ -1076,7 +1168,7 @@ with tab3:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(righe_selezionate).reset_index(drop=True)
                     salva_dati(df)
-                    st.success("Righe eliminate e rimosse da Calendar!")
+                    st.success("Righe eliminate da Sheets e relativi eventi rimossi da Google Calendar!")
                     st.rerun()
                 else:
                     st.warning("Seleziona almeno un appuntamento da eliminare.")
@@ -1106,7 +1198,11 @@ with tab3:
                     
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     salva_dati(df)
-                    st.success("Appuntamento duplicato e aggiunto a Calendar!")
+                    
+                    if cal_id:
+                        st.success("Appuntamento duplicato e sincronizzato su Google Calendar!")
+                    else:
+                        st.warning("Appuntamento duplicato su Sheets, MA non sincronizzato su Google Calendar.")
                     st.rerun()
                 elif len(righe_selezionate) > 1:
                     st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
@@ -1253,12 +1349,17 @@ with tab3:
                         if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
                             res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
                             df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                            cal_success = bool(res_id)
                         else:
                             cal_id = sincronizza_google_calendar("crea", dati_evento)
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+                            cal_success = bool(cal_id)
 
                         salva_dati(df)
-                        st.success("Modifiche salvate e calendario aggiornato!")
+                        if cal_success:
+                            st.success("Modifiche salvate e Google Calendar aggiornato!")
+                        else:
+                            st.warning("Modifiche salvate su Google Sheets, MA l'aggiornamento di Google Calendar è fallito.")
                         st.rerun()
 
         st.markdown("---")
@@ -1439,6 +1540,7 @@ with tab3:
         with c_exp4:
             if st.button("Sincronizza eventi mancanti", use_container_width=True, help="Invia a Google Calendar gli eventi salvati che non hanno ancora un ID Calendar"):
                 count_sinc = 0
+                count_fail = 0
                 for idx, row in df.iterrows():
                     cal_id = str(row.get("Calendar_ID", ""))
                     if not cal_id or cal_id.lower() in ["nan", "none", ""]:
@@ -1457,10 +1559,17 @@ with tab3:
                         if nuovo_id:
                             df.loc[idx, "Calendar_ID"] = str(nuovo_id)
                             count_sinc += 1
+                        else:
+                            count_fail += 1
                 if count_sinc > 0:
                     salva_dati(df)
-                    st.success(f"Sincronizzati con successo {count_sinc} eventi su Google Calendar!")
+                    if count_fail == 0:
+                        st.success(f"Sincronizzati con successo {count_sinc} eventi mancanti su Google Calendar!")
+                    else:
+                        st.warning(f"Sincronizzati {count_sinc} eventi. {count_fail} eventi non sono stati sincronizzati a causa di errori API.")
                     st.rerun()
+                elif count_fail > 0:
+                    st.error(f"Tentativo fallito per {count_fail} eventi mancanti. Controlla il messaggio di errore in alto o esegui il test in Tab 2.")
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
