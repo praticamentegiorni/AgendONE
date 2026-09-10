@@ -93,7 +93,7 @@ def traduci_mese(mese_en):
 
 # Parser per date in formato italiano DD/MM/YYYY o ISO YYYY-MM-DD
 def parse_data_italiana(val):
-    if pd.isna(val) or str(val).strip() == "" or str(val).lower() == "none" or str(val).lower() == "nan":
+    if pd.isna(val) or str(val).strip() == "" or str(val).lower() in ["none", "nan"]:
         return pd.NaT
     val_str = str(val).strip()
     
@@ -107,7 +107,7 @@ def parse_data_italiana(val):
         parti = val_str.split("/")
         if len(parti) == 3:
             giorno, mese, anno = int(parti[0]), int(parti[1]), int(parti[2])
-            return datetime.datetime(anno, mese, giorno)
+            return pd.Timestamp(year=anno, month=mese, day=giorno)
     except:
         pass
         
@@ -517,12 +517,12 @@ def carica_dati():
             df = df.rename(columns={"Luogo": "Sede"})
             
         if "Data" in df.columns:
-            df["Data_dt"] = df["Data"].apply(parse_data_italiana)
+            df["Data_dt"] = pd.to_datetime(df["Data"].apply(parse_data_italiana))
             
             mask_valid = df["Data_dt"].notna()
             df.loc[mask_valid, "Data"] = df.loc[mask_valid, "Data_dt"].dt.strftime("%Y-%m-%d")
             df.loc[mask_valid, "Mese"] = df.loc[mask_valid, "Data_dt"].apply(
-                lambda dt: traduci_mese(dt.strftime("%B")).capitalize()
+                lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else ""
             )
             
         if "Svolto" not in df.columns:
@@ -566,6 +566,11 @@ def salva_dati(df_to_save):
             df_to_save[c] = ""
     df_to_save = df_to_save[cols_standard]
     df_to_save = df_to_save.fillna("")
+    
+    df_clean = df_to_save.copy()
+    for col in df_clean.columns:
+        df_clean[col] = df_clean[col].apply(lambda x: bool(x) if isinstance(x, (bool, pd.BooleanDtype)) else (str(x) if pd.notna(x) else ""))
+
     try:
         worksheet = get_gspread_client_and_sheet("Foglio1")
         if worksheet is None:
@@ -573,7 +578,7 @@ def salva_dati(df_to_save):
             return
             
         worksheet.clear()
-        righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        righe = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
         worksheet.update("A1", righe)
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
@@ -865,6 +870,15 @@ with tab2:
     st.subheader("Gestione Avanzata Voci (Enti, Classi, Sedi e Modalità)")
     st.markdown("Gestisci gli elenchi a tendina per l'inserimento rapido delle attività. Il sistema impedisce automaticamente l'inserimento di voci duplicate.")
 
+    def esci_placeholder(t):
+        if "Enti" in t: return "Es. Scuola Bufalini..."
+        if "Classi" in t: return "Es. Classe 4A..."
+        if "Sedi" in t: return "Es. Aula Magna..."
+        return "Es. Presenza / Online..."
+
+    def restituisci_messaggio_duplicato(t, nome):
+        return f"Attenzione: '{nome}' è già presente nell'elenco degli {t.lower()}." if t == "Enti" else f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
+
     def gestisci_sezione_combo(titolo_sezione, chiave_config):
         st.markdown(f"### {titolo_sezione}")
         lista_corrente = config[chiave_config]
@@ -927,15 +941,6 @@ with tab2:
                         st.success(f"Voce '{voce_selezionata}' eliminata!")
                         st.rerun()
 
-    def esci_placeholder(t):
-        if "Enti" in t: return "Es. Scuola Bufalini..."
-        if "Classi" in t: return "Es. Classe 4A..."
-        if "Sedi" in t: return "Es. Aula Magna..."
-        return "Es. Presenza / Online..."
-
-    def restituisci_messaggio_duplicato(t, nome):
-        return f"Attenzione: '{nome}' è già presente nell'elenco degli {t.lower()}." if t == "Enti" else f"Attenzione: '{nome}' è già presente nell'elenco delle {t.lower()}."
-
     col1, col2, col3, col4 = st.columns(4, gap="medium")
     with col1:
         gestisci_sezione_combo("Enti", "enti")
@@ -955,7 +960,7 @@ with tab3:
         df_vis["ID_originale"] = df_vis.index
         
         if "Data" in df_vis.columns:
-            df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
+            df_vis["Data_dt"] = pd.to_datetime(df_vis["Data"].apply(parse_data_italiana))
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
@@ -974,21 +979,8 @@ with tab3:
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
 
-        def colora_righe_tabella(row):
-            svolto = row.get("Svolto", False)
-            if svolto:
-                return ['background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'] * len(row)
-            mod = str(row.get("Modalità", "")).lower()
-            if "presenza" in mod:
-                return ['background-color: #1c3d73; color: #ffffff'] * len(row)
-            elif "video" in mod:
-                return ['background-color: #155c32; color: #ffffff'] * len(row)
-            return [''] * len(row)
-
-        df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
-
         df_editato = st.data_editor(
-            df_styled,
+            df_mostra,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -1073,10 +1065,8 @@ with tab3:
 
             st.markdown(f"### Modifica Appuntamento (Riga ID {riga_idx})")
             with st.form("form_modifica_multipla"):
-                try:
-                    data_default = datetime.datetime.strptime(str(riga_corrente["Data"]), "%Y-%m-%d").date()
-                except:
-                    data_default = datetime.date.today()
+                parsed_d = parse_data_italiana(riga_corrente["Data"])
+                data_default = parsed_d.date() if pd.notnull(parsed_d) else datetime.date.today()
 
                 try:
                     parti_i = str(riga_corrente["Orario Inizio"]).split(":")
@@ -1251,7 +1241,7 @@ with tab3:
 
         df_report = df.copy()
         if "Data_dt" not in df_report.columns:
-            df_report["Data_dt"] = df_report["Data"].apply(parse_data_italiana)
+            df_report["Data_dt"] = pd.to_datetime(df_report["Data"].apply(parse_data_italiana))
         df_report["Ore"] = df_report.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
 
         if data_inizio_filtro:
@@ -1454,7 +1444,7 @@ with tab4:
 
     df_cal = df.copy()
     if not df_cal.empty:
-        df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
+        df_cal["Data_dt"] = pd.to_datetime(df_cal["Data"].apply(parse_data_italiana))
         df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
         
         df_mese = df_cal[
