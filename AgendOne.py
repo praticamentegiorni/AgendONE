@@ -443,6 +443,7 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
     except Exception as e:
         st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
+
 # Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
 def carica_config():
     default_config = {
@@ -711,7 +712,11 @@ with tab1:
                         "Reminder_Minuti": minuti_prom_singolo
                     }
                     
-                    cal_id = sincronizza_google_calendar("crea", dati_evento)
+                    try:
+                        cal_id = sincronizza_google_calendar("crea", dati_evento)
+                    except Exception as e:
+                        st.error(f"Errore Calendar: {e}")
+                        cal_id = None
 
                     nuovo_dato = pd.DataFrame({
                         "Data": [data_selezionata.strftime("%Y-%m-%d")],
