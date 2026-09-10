@@ -88,18 +88,6 @@ MESI_ITALIANI = {
     "December": "Dicembre",
 }
 
-# Opzioni promemoria Google Calendar (etichetta -> minuti)
-OPZIONI_PROMEMORIA = {
-    "Nessun promemoria": 0,
-    "15 minuti prima": 15,
-    "30 minuti prima": 30,
-    "1 ora prima": 60,
-    "2 ore prima": 120,
-    "4 ore prima (Default)": 240,
-    "1 giorno prima": 1440,
-    "2 giorni prima": 2880
-}
-
 def traduci_mese(mese_en):
     return MESI_ITALIANI.get(mese_en, mese_en)
 
@@ -389,19 +377,6 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
             start_datetime = f"{data_str}T{dati_evento['Orario Inizio']}:00"
             end_datetime = f"{data_str}T{dati_evento['Orario Fine']}:00"
 
-            reminder_min = dati_evento.get("Reminder_Minuti", 240)
-            if reminder_min is not None and str(reminder_min).isdigit() and int(reminder_min) >= 0:
-                rem_val = int(reminder_min)
-                if rem_val == 0:
-                    reminders_body = {'useDefault': False, 'overrides': []}
-                else:
-                    reminders_body = {
-                        'useDefault': False,
-                        'overrides': [{'method': 'popup', 'minutes': rem_val}]
-                    }
-            else:
-                reminders_body = {'useDefault': True}
-
             body = {
                 'summary': f"Lezione/Impegno: [{dati_evento.get('Ente', '')}] {dati_evento['Classe']} ({dati_evento['Modalità']})",
                 'location': str(dati_evento['Sede']),
@@ -414,7 +389,9 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     'dateTime': end_datetime,
                     'timeZone': 'Europe/Rome',
                 },
-                'reminders': reminders_body,
+                'reminders': {
+                    'useDefault': True,
+                },
             }
 
         if azione == "crea":
@@ -617,8 +594,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 if "lista_sessioni_temp" not in st.session_state:
     st.session_state["lista_sessioni_temp"] = []
 
-opzioni_prom_keys = list(OPZIONI_PROMEMORIA.keys())
-
 # ================= TAB 1: INSERIMENTO =================
 with tab1:
     st.subheader("Registrazione Nuova Attività")
@@ -672,9 +647,6 @@ with tab1:
                 modalita = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="sel_mod")
                 nuovo_mod_libero = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="lib_mod")
 
-            prom_scelto_lbl = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=5, key="singolo_prom")
-            minuti_prom_singolo = OPZIONI_PROMEMORIA[prom_scelto_lbl]
-
             svolto_iniziale = st.checkbox("Impegno già svolto", value=False)
             escludi_conteggio_iniziale = st.checkbox("Escludi dal conteggio ore", value=False)
             note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
@@ -709,7 +681,7 @@ with tab1:
                         "Sede": val_sede,
                         "Modalità": val_modalita,
                         "Note": note,
-                        "Reminder_Minuti": minuti_prom_singolo
+                        "Reminder_Minuti": 240
                     }
                     
                     cal_id = sincronizza_google_calendar("crea", dati_evento)
@@ -728,7 +700,7 @@ with tab1:
                         "Escludi_Conteggio": [escludi_conteggio_iniziale],
                         "Note": [note],
                         "Calendar_ID": [str(cal_id) if cal_id else ""],
-                        "Reminder_Minuti": [minuti_prom_singolo]
+                        "Reminder_Minuti": [240]
                     })
 
                     df = pd.concat([df, nuovo_dato], ignore_index=True)
@@ -762,9 +734,6 @@ with tab1:
         with col_mt3:
             modalita_m = st.selectbox("Modalità", options=opts_modalita if opts_modalita else [""], index=0 if opts_modalita else 0, key="m_sel_mod")
             nuovo_mod_libero_m = st.text_input("O digita nuova modalità:", placeholder="Se non è in elenco...", key="m_lib_mod")
-
-        prom_scelto_lbl_m = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=5, key="multi_prom")
-        minuti_prom_m = OPZIONI_PROMEMORIA[prom_scelto_lbl_m]
 
         col_mc1, col_mc2 = st.columns(2)
         with col_mc1:
@@ -858,7 +827,7 @@ with tab1:
                             "Sede": val_sede_m,
                             "Modalità": val_modalita_m,
                             "Note": note_m,
-                            "Reminder_Minuti": minuti_prom_m
+                            "Reminder_Minuti": 240
                         }
                         
                         cal_id = sincronizza_google_calendar("crea", dati_evento)
@@ -877,7 +846,7 @@ with tab1:
                             "Escludi_Conteggio": escludi_m,
                             "Note": note_m,
                             "Calendar_ID": str(cal_id) if cal_id else "",
-                            "Reminder_Minuti": minuti_prom_m
+                            "Reminder_Minuti": 240
                         })
 
                     salva_config(config)
@@ -1169,15 +1138,11 @@ with tab3:
                 mod_modalita_sel = st.selectbox("Modalità", options=modalita_esistenti if modalita_esistenti else [""], index=idx_mod if modalita_esistenti else 0, key="mod_sel_mod")
                 mod_modalita_libera = st.text_input("O digita nuova modalità (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_mod")
                 
-                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240)) if pd.notnull(riga_corrente.get("Reminder_Minuti")) else 240
-                idx_prom_def = 5
-                for idx_p, (lbl_p, min_p) in enumerate(OPZIONI_PROMEMORIA.items()):
-                    if min_p == attuale_minuti:
-                        idx_prom_def = idx_p
-                        break
-
-                prom_scelto_mod_lbl = st.selectbox("Promemoria Google Calendar", options=opzioni_prom_keys, index=idx_prom_def, key="mod_prom")
-                minuti_scelti_mod = OPZIONI_PROMEMORIA[prom_scelto_mod_lbl]
+                attuale_minuti = int(riga_corrente.get("Reminder_Minuti", 240))
+                
+                st.selectbox("Modifica Avviso / Promemoria Calendar (Disabilitato)", options=["Funzione temporaneamente disabilitata"], index=0, disabled=True)
+                st.caption("Nota: La modifica dell'orario di notifica è momentaneamente disabilitata.")
+                minuti_scelti_mod = attuale_minuti
 
                 svolto_corrente = bool(riga_corrente["Svolto"]) if "Svolto" in riga_corrente else False
                 mod_svolto = st.checkbox("Impegno svolto", value=svolto_corrente)
