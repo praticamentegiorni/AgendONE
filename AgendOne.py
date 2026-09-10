@@ -1339,7 +1339,7 @@ with tab4:
 
     th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
 
-    html_cal = f"""
+    tuo_codice_html_tabella = f"""
     <style>
       .cal-table {{
         width: 100%;
@@ -1431,4 +1431,4 @@ with tab4:
     </table>
     """
 
-    st.markdown(html_cal, unsafe_allow_html=True)
+    st.markdown(tuo_codice_html_tabella, unsafe_allow_html=True)
