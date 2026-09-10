@@ -1408,7 +1408,6 @@ with tab3:
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
-# ================= TAB 4: CALENDARIO =================
 # ================= TAB 4: CALENDARIO (CORRETTO) =================
 with tab4:
     st.subheader("Vista Calendario Mensile")
