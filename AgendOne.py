@@ -764,27 +764,26 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # 8 righe condizionali per Inserimento Multiplo (orari 00:00-00:00 con ore 0-23 e minuti 0-59 e testo accanto)
+        # 8 righe condizionali per Inserimento Multiplo (orari ristretti e più spazio al testo)
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
             st.markdown("### Sezione 8 Appuntamenti Multipli")
-            st.caption("Compila le righe desiderate inserendo l'intervallo di orario (0-23 per le ore, 0-59 per i minuti) e il testo associato.")
+            st.caption("Compila le righe desiderate inserendo l'intervallo di orario e il testo associato.")
             
             righe_multiplo_lista = []
             for i in range(8):
-                st.markdown(f"**Riga {i+1}**")
-                rc1, rc2, rc3, rc4, rc5 = st.columns([0.7, 0.7, 0.7, 0.7, 6])
+                rc1, rc2, rc3, rc4, rc5 = st.columns([0.45, 0.45, 0.45, 0.45, 4.2])
                 with rc1:
-                    m_ora_i = st.selectbox(f"Da Ora {i+1}", options=list(range(0, 24)), index=0, key=f"m_ora_i_{i}")
+                    m_ora_i = st.selectbox(f"DaO{i+1}", options=list(range(0, 24)), index=0, key=f"m_ora_i_{i}", label_visibility="collapsed")
                 with rc2:
-                    m_min_i = st.selectbox(f"Da Min {i+1}", options=list(range(0, 60)), index=0, key=f"m_min_i_{i}")
+                    m_min_i = st.selectbox(f"DaM{i+1}", options=list(range(0, 60)), index=0, key=f"m_min_i_{i}", label_visibility="collapsed")
                 with rc3:
-                    m_ora_f = st.selectbox(f"A Ora {i+1}", options=list(range(0, 24)), index=1, key=f"m_ora_f_{i}")
+                    m_ora_f = st.selectbox(f"AO{i+1}", options=list(range(0, 24)), index=1, key=f"m_ora_f_{i}", label_visibility="collapsed")
                 with rc4:
-                    m_min_f = st.selectbox(f"A Min {i+1}", options=list(range(0, 60)), index=0, key=f"m_min_f_{i}")
+                    m_min_f = st.selectbox(f"AM{i+1}", options=list(range(0, 60)), index=0, key=f"m_min_f_{i}", label_visibility="collapsed")
                 with rc5:
-                    m_testo = st.text_input(f"Testo {i+1}", placeholder=f"Testo riga {i+1}...", key=f"m_testo_{i}")
+                    m_testo = st.text_input(f"Testo {i+1}", placeholder=f"Testo appuntamento {i+1}...", key=f"m_testo_{i}", label_visibility="collapsed")
                 
                 if m_testo.strip():
                     orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
