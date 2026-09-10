@@ -764,14 +764,15 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
-        # Casella testo aggiuntiva condizionale per inserimento multiplo
+        # Casella testo aggiuntiva con campi obbligatori "00:00-00:00" all'inizio per ciascuna riga
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
             st.markdown("### Sezione Inserimento Multiplo Appuntamenti")
+            st.markdown("Inserisci un appuntamento per riga. **Ogni riga deve iniziare obbligatoriamente con il formato `00:00-00:00`** (ore da 0 a 23, minuti da 0 a 59), seguito dal testo dell'appuntamento.")
             appunto_multiplo = st.text_area(
-                "Testo Appuntamenti Multipli (puoi andare a capo, usa lo scroll)",
-                placeholder="Scrivi qui i testi da inserire nella stessa cella...",
+                "Testo Appuntamenti Multipli (obbligatorio formato orario iniziale)",
+                placeholder="08:00-09:30 Primo appuntamento\n10:00-12:00 Secondo appuntamento...",
                 height=150,
                 key="textarea_multiplo"
             )
@@ -780,66 +781,99 @@ with tab1:
         submit_button = st.form_submit_button(label=submit_button_label, use_container_width=True)
 
         if submit_button:
-            if orario_inizio_str >= orario_fine_str:
-                st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
-            else:
-                val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
-                val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
-                val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
-                val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
+            # Validazione specifica per Inserimento Multiplo se selezionato
+            errore_validazione = False
+            righe_multiplo_validate = []
+            
+            if tipo_inserimento == "Inserimento Multiplo":
+                if not appunto_multiplo.strip():
+                    st.error("Il campo dell'inserimento multiplo non può essere vuoto.")
+                    errore_validazione = True
+                else:
+                    import re
+                    # Pattern per verificare la presenza di HH:MM-HH:MM all'inizio della riga
+                    pattern_orario = r"^([0-1]?[0-9]|2[0-3]):([0-5][0-9])-([0-1]?[0-9]|2[0-3]):([0-5][0-9])"
+                    
+                    linee = appunto_multiplo.strip().split("\n")
+                    for idx_riga, linea in enumerate(linee, start=1):
+                        linea_pulita = linea.strip()
+                        if not linea_pulita:
+                            continue
+                        match = re.match(pattern_orario, linea_pulita)
+                        if not match:
+                            st.error(f"Errore alla riga {idx_riga}: la riga deve iniziare obbligatoriamente con il formato `00:00-00:00` valido (ore 0-23, minuti 0-59). Testo inserito: '{linea_pulita}'")
+                            errore_validazione = True
+                            break
+                        
+                        # Estrazione ore e minuti per validazione logica inizio < fine opzionale o salvataggio
+                        h_i, m_i, h_f, m_f = map(int, match.groups())
+                        minuti_inizio_tot = h_i * 60 + m_i
+                        minuti_fine_tot = h_f * 60 + m_f
+                        if minuti_inizio_tot >= minuti_fine_tot:
+                            st.error(f"Errore alla riga {idx_riga}: l'orario di inizio ({h_i:02d}:{m_i:02d}) deve essere precedente all'orario di fine ({h_f:02d}:{m_f:02d}).")
+                            errore_validazione = True
+                            break
 
-                if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
-                    config["enti"].append(nuovo_ente_libero)
-                if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
-                    config["classi"].append(nuova_classe_libera)
-                if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
-                    config["sedi"].append(nuova_sede_libera)
-                if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
-                    config["modalita"].append(nuovo_mod_libero)
-                salva_config(config)
+            if not errore_validazione:
+                if orario_inizio_str >= orario_fine_str and tipo_inserimento != "Inserimento Multiplo":
+                    st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
+                else:
+                    val_ente = nuovo_ente_libero.strip() if nuovo_ente_libero else ente
+                    val_classe = nuova_classe_libera.strip() if nuova_classe_libera else classe
+                    val_sede = nuova_sede_libera.strip() if nuova_sede_libera else sede
+                    val_modalita = nuovo_mod_libero.strip() if nuovo_mod_libero else modalita
 
-                # Generazione codice univoco composto da data (DDMMYYYY) + ora (HH:MM:SS senza i due punti o con i due punti)
-                now_ts = datetime.datetime.now()
-                codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
+                    if nuovo_ente_libero and nuovo_ente_libero not in config["enti"]:
+                        config["enti"].append(nuovo_ente_libero)
+                    if nuova_classe_libera and nuova_classe_libera not in config["classi"]:
+                        config["classi"].append(nuova_classe_libera)
+                    if nuova_sede_libera and nuova_sede_libera not in config["sedi"]:
+                        config["sedi"].append(nuova_sede_libera)
+                    if nuovo_mod_libero and nuovo_mod_libero not in config["modalita"]:
+                        config["modalita"].append(nuovo_mod_libero)
+                    salva_config(config)
 
-                dati_evento = {
-                    "Data": data_selezionata.strftime("%Y-%m-%d"),
-                    "Orario Inizio": orario_inizio_str,
-                    "Orario Fine": orario_fine_str,
-                    "Ente": val_ente,
-                    "Classe": val_classe,
-                    "Sede": val_sede,
-                    "Modalità": val_modalita,
-                    "Note": note,
-                    "Appunto_Multiplo": appunto_multiplo,
-                    "Reminder_Minuti": minuti_scelti
-                }
-                
-                cal_id = sincronizza_google_calendar("crea", dati_evento)
+                    now_ts = datetime.datetime.now()
+                    codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
 
-                nuovo_dato = pd.DataFrame({
-                    "Data": [data_selezionata.strftime("%Y-%m-%d")],
-                    "Mese": [mese_str],
-                    "Orario Inizio": [orario_inizio_str],
-                    "Orario Fine": [orario_fine_str],
-                    "Ore": [ore_calcolate],
-                    "Ente": [val_ente],
-                    "Classe": [val_classe],
-                    "Sede": [val_sede],
-                    "Modalità": [val_modalita],
-                    "Svolto": [svolto_iniziale],
-                    "Escludi_Conteggio": [escludi_conteggio_iniziale],
-                    "Note": [note],
-                    "Appunto_Multiplo": [appunto_multiplo],
-                    "Codice_Univoco": [codice_univoco_generato],
-                    "Calendar_ID": [str(cal_id) if cal_id else ""],
-                    "Reminder_Minuti": [minuti_scelti]
-                })
+                    dati_evento = {
+                        "Data": data_selezionata.strftime("%Y-%m-%d"),
+                        "Orario Inizio": orario_inizio_str,
+                        "Orario Fine": orario_fine_str,
+                        "Ente": val_ente,
+                        "Classe": val_classe,
+                        "Sede": val_sede,
+                        "Modalità": val_modalita,
+                        "Note": note,
+                        "Appunto_Multiplo": appunto_multiplo,
+                        "Reminder_Minuti": minuti_scelti
+                    }
+                    
+                    cal_id = sincronizza_google_calendar("crea", dati_evento)
 
-                df = pd.concat([df, nuovo_dato], ignore_index=True)
-                salva_dati(df)
-                st.success("Attività salvata e sincronizzata con Google Calendar!")
-                st.rerun()
+                    nuovo_dato = pd.DataFrame({
+                        "Data": [data_selezionata.strftime("%Y-%m-%d")],
+                        "Mese": [mese_str],
+                        "Orario Inizio": [orario_inizio_str],
+                        "Orario Fine": [orario_fine_str],
+                        "Ore": [ore_calcolate],
+                        "Ente": [val_ente],
+                        "Classe": [val_classe],
+                        "Sede": [val_sede],
+                        "Modalità": [val_modalita],
+                        "Svolto": [svolto_iniziale],
+                        "Escludi_Conteggio": [escludi_conteggio_iniziale],
+                        "Note": [note],
+                        "Appunto_Multiplo": [appunto_multiplo],
+                        "Codice_Univoco": [codice_univoco_generato],
+                        "Calendar_ID": [str(cal_id) if cal_id else ""],
+                        "Reminder_Minuti": [minuti_scelti]
+                    })
+
+                    df = pd.concat([df, nuovo_dato], ignore_index=True)
+                    salva_dati(df)
+                    st.success("Attività salvata e sincronizzata con Google Calendar!")
+                    st.rerun()
 
 # ================= TAB 2: GESTIONE TABELLE & COMBO =================
 with tab2:
@@ -1140,66 +1174,84 @@ with tab3:
                 
                 # Modifica del testo inserito per il multi-impegno (richiesta specifica)
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
+                st.markdown("Ogni riga deve iniziare obbligatoriamente con il formato `00:00-00:00` (ore da 0 a 23, minuti da 0 a 59).")
                 mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
-                    if mod_orario_i_str >= mod_orario_f_str:
-                        st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
-                    else:
-                        val_ente_finale = mod_ente_libero.strip() if mod_ente_libero else mod_ente_sel
-                        val_classe_finale = mod_classe_libera.strip() if mod_classe_libera else mod_classe_sel
-                        val_sede_finale = mod_sede_libera.strip() if mod_sede_libera else mod_sede_sel
-                        val_modalita_finale = mod_modalita_libera.strip() if mod_modalita_libera else mod_modalita_sel
+                    # Validazione form di modifica per il campo multi-impegno
+                    errore_mod_multiplo = False
+                    if mod_appunto_multiplo.strip():
+                        import re
+                        pattern_orario = r"^([0-1]?[0-9]|2[0-3]):([0-5][0-9])-([0-1]?[0-9]|2[0-3]):([0-5][0-9])"
+                        linee_mod = mod_appunto_multiplo.strip().split("\n")
+                        for idx_riga, linea in enumerate(linee_mod, start=1):
+                            linea_pulita = linea.strip()
+                            if not linea_pulita:
+                                continue
+                            match = re.match(pattern_orario, linea_pulita)
+                            if not match:
+                                st.error(f"Errore alla riga {idx_riga} nel testo multiplo: la riga deve iniziare con il formato `00:00-00:00` valido.")
+                                errore_mod_multiplo = True
+                                break
 
-                        if mod_ente_libero and mod_ente_libero not in config["enti"]:
-                            config["enti"].append(mod_ente_libero)
-                        if mod_classe_libera and mod_classe_libera not in config["classi"]:
-                            config["classi"].append(mod_classe_libera)
-                        if mod_sede_libera and mod_sede_libera not in config["sedi"]:
-                            config["sedi"].append(mod_sede_libera)
-                        if mod_modalita_libera and mod_modalita_libera not in config["modalita"]:
-                            config["modalita"].append(mod_modalita_libera)
-                        salva_config(config)
-
-                        df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
-                        df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
-                        df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
-                        df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
-                        df.loc[riga_idx, "Ore"] = mod_ore_calc
-                        df.loc[riga_idx, "Ente"] = val_ente_finale
-                        df.loc[riga_idx, "Classe"] = val_classe_finale
-                        df.loc[riga_idx, "Sede"] = val_sede_finale
-                        df.loc[riga_idx, "Modalità"] = val_modalita_finale
-                        df.loc[riga_idx, "Svolto"] = mod_svolto
-                        df.loc[riga_idx, "Escludi_Conteggio"] = mod_escluso
-                        df.loc[riga_idx, "Note"] = mod_note
-                        df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo
-                        df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
-
-                        dati_evento = {
-                            "Data": mod_data.strftime("%Y-%m-%d"),
-                            "Orario Inizio": mod_orario_i_str,
-                            "Orario Fine": mod_orario_f_str,
-                            "Ente": val_ente_finale,
-                            "Classe": val_classe_finale,
-                            "Sede": val_sede_finale,
-                            "Modalità": val_modalita_finale,
-                            "Note": mod_note,
-                            "Appunto_Multiplo": mod_appunto_multiplo,
-                            "Reminder_Minuti": minuti_scelti_mod
-                        }
-
-                        cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
-                            res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
-                            df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                    if not errore_mod_multiplo:
+                        if mod_orario_i_str >= mod_orario_f_str:
+                            st.error("L'orario di inizio non può essere successivo o uguale all'orario di fine.")
                         else:
-                            cal_id = sincronizza_google_calendar("crea", dati_evento)
-                            df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+                            val_ente_finale = mod_ente_libero.strip() if mod_ente_libero else mod_ente_sel
+                            val_classe_finale = mod_classe_libera.strip() if mod_classe_libera else mod_classe_sel
+                            val_sede_finale = mod_sede_libera.strip() if mod_sede_libera else mod_sede_sel
+                            val_modalita_finale = mod_modalita_libera.strip() if mod_modalita_libera else mod_modalita_sel
 
-                        salva_dati(df)
-                        st.success("Modifiche salvate e calendario aggiornato!")
-                        st.rerun()
+                            if mod_ente_libero and mod_ente_libero not in config["enti"]:
+                                config["enti"].append(mod_ente_libero)
+                            if mod_classe_libera and mod_classe_libera not in config["classi"]:
+                                config["classi"].append(mod_classe_libera)
+                            if mod_sede_libera and mod_sede_libera not in config["sedi"]:
+                                config["sedi"].append(mod_sede_libera)
+                            if mod_modalita_libera and mod_modalita_libera not in config["modalita"]:
+                                config["modalita"].append(mod_modalita_libera)
+                            salva_config(config)
+
+                            df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
+                            df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
+                            df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
+                            df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
+                            df.loc[riga_idx, "Ore"] = mod_ore_calc
+                            df.loc[riga_idx, "Ente"] = val_ente_finale
+                            df.loc[riga_idx, "Classe"] = val_classe_finale
+                            df.loc[riga_idx, "Sede"] = val_sede_finale
+                            df.loc[riga_idx, "Modalità"] = val_modalita_finale
+                            df.loc[riga_idx, "Svolto"] = mod_svolto
+                            df.loc[riga_idx, "Escludi_Conteggio"] = mod_escluso
+                            df.loc[riga_idx, "Note"] = mod_note
+                            df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo
+                            df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
+
+                            dati_evento = {
+                                "Data": mod_data.strftime("%Y-%m-%d"),
+                                "Orario Inizio": mod_orario_i_str,
+                                "Orario Fine": mod_orario_f_str,
+                                "Ente": val_ente_finale,
+                                "Classe": val_classe_finale,
+                                "Sede": val_sede_finale,
+                                "Modalità": val_modalita_finale,
+                                "Note": mod_note,
+                                "Appunto_Multiplo": mod_appunto_multiplo,
+                                "Reminder_Minuti": minuti_scelti_mod
+                            }
+
+                            cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
+                            if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                                res_id = sincronizza_google_calendar("aggiorna", dati_evento, cal_id_esistente)
+                                df.loc[riga_idx, "Calendar_ID"] = str(res_id) if res_id else cal_id_esistente
+                            else:
+                                cal_id = sincronizza_google_calendar("crea", dati_evento)
+                                df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
+
+                            salva_dati(df)
+                            st.success("Modifiche salvate e calendario aggiornato!")
+                            st.rerun()
 
         st.markdown("---")
         st.subheader("Generazione Report, Ricerca & Ordinamento")
@@ -1408,7 +1460,7 @@ with tab3:
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
-# ================= TAB 4: CALENDARIO (CORRETTO) =================
+# ================= TAB 4: CALENDARIO =================
 with tab4:
     st.subheader("Vista Calendario Mensile")
     
