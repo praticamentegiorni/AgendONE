@@ -1,3 +1,4 @@
+import calendar
 import datetime
 import io
 import json
@@ -1762,7 +1763,6 @@ with tab4:
         unsafe_allow_html=True
     )
 
-    import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
 
@@ -1910,27 +1910,30 @@ with tab4:
                     for imp in lista_imp:
                         escl_txt = " [ESCLUSO]" if imp['escluso'] else ""
                         svolt_txt = " [SVOLTO]" if imp['svolto'] else ""
-                        dettaglio_html += f"• <b>{imp['orario']}</b>: {imp['ente']} - {imp['classe']} ({imp['modalita']}){escl_txt}{svolt_txt}<br>"
+                        dettaglio_html += f"• <b>{imp['orario']}</b> - {imp['ente']} | {imp['classe']}{svolt_txt}{escl_txt}<br><small>Sede: {imp['sede']} ({imp['modalita']}) - Ore: {imp['ore']:.2f}h</small><br>"
+
+                    dettaglio_html_clean = dettaglio_html.replace('"', '&quot;')
 
                     if len(lista_imp) == 1:
-                        imp = lista_imp[0]
-                        badge_bg = "#2196F3" if "video" in imp["modalita"].lower() else ("#4CAF50" if "presenza" in imp["modalita"].lower() else "#ff9800")
-                        html_cal += f"""
+                        imp_singolo = lista_imp[0]
+                        badge_txt = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
+                        html_cal += f'''
                         <div class="tooltip-container">
-                            <span class="badge-impegno" style="background-color: {badge_bg};">{imp['orario']} | {imp['classe']}</span>
-                            <div class="tooltip-content">{dettaglio_html}</div>
+                            <span class="badge-impegno">{badge_txt}</span>
+                            <div class="tooltip-content">{dettaglio_html_clean}</div>
                         </div>
-                        """
+                        '''
                     else:
-                        html_cal += f"""
+                        badge_txt = f"🔴 {len(lista_imp)} Impegni"
+                        html_cal += f'''
                         <div class="tooltip-container">
-                            <span class="badge-impegno-multi">⚡ {len(lista_imp)} Appuntamenti</span>
-                            <div class="tooltip-content">{dettaglio_html}</div>
+                            <span class="badge-impegno-multi">{badge_txt}</span>
+                            <div class="tooltip-content">{dettaglio_html_clean}</div>
                         </div>
-                        """
-
+                        '''
                 html_cal += "</td>"
         html_cal += "</tr>"
+
     html_cal += "</table>"
 
     st.markdown(html_cal, unsafe_allow_html=True)
