@@ -1578,3 +1578,201 @@ with tab4:
         if st.button("Anno + >>", use_container_width=True):
             st.session_state["cal_anno"] += 1
             st.rerun()
+
+    st.markdown("---")
+
+    df_cal = df.copy()
+    if not df_cal.empty:
+        df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
+        df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
+        
+        df_mese = df_cal[
+            (df_cal["Data_dt"].notna()) & 
+            (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
+            (df_cal["Data_dt"].dt.month == st.session_state["cal_mese"])
+        ]
+    else:
+        df_mese = pd.DataFrame()
+
+    num_appuntamenti_mensili = len(df_mese)
+    df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
+    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_ore_valide.empty else 0.0
+
+    st.markdown(
+        f"""
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="background-color: #1c3d73; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="font-size: 14px; opacity: 0.8;">Numero Appuntamenti Mensili</span><br>
+                <span style="font-size: 22px; font-weight: bold;">{num_appuntamenti_mensili}</span>
+            </div>
+            <div style="background-color: #155c32; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="font-size: 14px; opacity: 0.8;">Ore Appuntamenti Mensili (Valide)</span><br>
+                <span style="font-size: 22px; font-weight: bold;">{ore_appuntamenti_mensili:.2f} h</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    import calendar
+    cal = calendar.Calendar(firstweekday=0)
+    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    
+    impegni_per_giorno = {}
+    if not df_mese.empty:
+        for _, row in df_mese.iterrows():
+            giorno_num = row["Data_dt"].day
+            if giorno_num not in impegni_per_giorno:
+                impegni_per_giorno[giorno_num] = []
+            
+            impegni_per_giorno[giorno_num].append({
+                "ente": str(row.get("Ente", "")),
+                "classe": str(row.get("Classe", "")),
+                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
+                "ore": row.get("Ore", 0.0),
+                "sede": str(row.get("Sede", "")),
+                "modalita": str(row.get("Modalità", "")),
+                "note": str(row.get("Note", "")),
+                "svolto": bool(row.get("Svolto", False)),
+                "escluso": bool(row.get("Escludi_Conteggio", False))
+            })
+
+    html_righe = ""
+    for settimana in giorni_mese:
+        html_righe += "<tr>"
+        for giorno in settimana:
+            if giorno == 0:
+                html_righe += '<td class="cal-cell-empty"></td>'
+            else:
+                ha_impegni = giorno in impegni_per_giorno
+                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
+                
+                html_righe += f'<td class="cal-cell" style="{bg_style}">'
+                html_righe += f'<div class="day-number">{giorno}</div>'
+
+                if ha_impegni:
+                    lista_imp = impegni_per_giorno[giorno]
+                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b>"
+                    dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
+                    
+                    for imp in lista_imp:
+                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
+                        escl_nota = " [Escluso]" if imp["escluso"] else ""
+                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
+                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
+                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
+                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
+                        if imp['note']:
+                            dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
+                        dettaglio_html += "</div>"
+
+                    html_righe += '<div class="tooltip-container">'
+                    if len(lista_imp) == 1:
+                        imp_singolo = lista_imp[0]
+                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
+                        html_righe += f'<span class="badge-impegno">{testo_badge}</span>'
+                    else:
+                        html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
+                    
+                    html_righe += f'<div class="tooltip-content">{dettaglio_html}</div>'
+                    html_righe += '</div>'
+
+                html_righe += '</td>'
+        html_righe += "</tr>"
+
+    th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
+
+    html_cal = f"""
+    <style>
+      .cal-table {{
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }}
+      .cal-th {{
+        background-color: #1c3d73;
+        color: white;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+        border: 1px solid #333333;
+      }}
+      .cal-cell {{
+        height: 90px;
+        vertical-align: top;
+        padding: 6px;
+        border: 1px solid #444444;
+        background-color: #1e1e1e;
+        position: relative;
+      }}
+      .cal-cell-empty {{
+        background-color: #121212;
+        border: 1px solid #2a2a2a;
+        height: 90px;
+      }}
+      .day-number {{
+        font-weight: bold;
+        font-size: 13px;
+        color: #ffffff;
+        margin-bottom: 4px;
+      }}
+      .badge-impegno {{
+        background-color: #2fa866;
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        display: block;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }}
+      .badge-impegno-multi {{
+        background-color: #c0392b;
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        display: block;
+        margin-bottom: 2px;
+        text-align: center;
+        font-weight: bold;
+      }}
+      .tooltip-container {{
+        position: relative;
+        display: block;
+        cursor: pointer;
+      }}
+      .tooltip-content {{
+        visibility: hidden;
+        width: 260px;
+        background-color: #2c3e50;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 8px 10px;
+        position: absolute;
+        z-index: 100;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+        font-size: 12px;
+        line-height: 1.4;
+      }}
+      .tooltip-container:hover .tooltip-content {{
+        visibility: visible;
+        opacity: 1;
+      }}
+    </style>
+    <table class="cal-table">
+      <tr>{th_html}</tr>
+      {html_righe}
+    </table>
+    """
+
+    st.markdown(html_cal, unsafe_allow_html=True)
