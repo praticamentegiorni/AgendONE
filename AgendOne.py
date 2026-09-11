@@ -1556,7 +1556,6 @@ with tab4:
             st.session_state["cal_anno"] -= 1
             st.rerun()
     with col_nav2:
-        with col_nav2:
         if st.button("< Mese -", use_container_width=True):
             if st.session_state["cal_mese"] == 1:
                 st.session_state["cal_mese"] = 12
