@@ -173,7 +173,6 @@ st.markdown(
     }
 
     /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
-    /* Modifica larghezze specifiche per le intestazioni e celle dell'archivio */
     div[data-testid="stDataEditor"] th div[title*="Orario"],
     div[data-testid="stDataEditor"] th div[title*="Selezione"],
     div[data-testid="stDataEditor"] th div[title*="Svolto"],
@@ -187,7 +186,6 @@ st.markdown(
     /* OTTIMIZZAZIONI SPECIFICHE PER SMARTPHONE (Schermi stretti) */
     /* ========================================================== */
     @media screen and (max-width: 768px) {
-        /* Forza lo stacking verticale delle colonne di Streamlit su mobile */
         .stColumns {
             flex-direction: column !important;
         }
@@ -198,21 +196,18 @@ st.markdown(
             margin-bottom: 8px !important;
         }
         
-        /* Riduce i margini e i padding del container principale */
         .block-container {
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
             padding-top: 1rem !important;
         }
 
-        /* Adatta la dimensione dei Tab del menu per schermi verticali */
         button[data-baseweb="tab"] {
             font-size: 14px !important;
             padding: 8px 12px !important;
             margin-right: 4px !important;
         }
 
-        /* Ottimizzazione celle calendario mensile su mobile */
         .cal-cell {
             height: 75px !important;
             padding: 3px !important;
@@ -255,17 +250,21 @@ def parse_data_italiana(val):
         return pd.NaT
     val_str = str(val).strip()
     
+    # Se contiene trattini ed è in formato YYYY-MM-DD
     if "-" in val_str and len(val_str.split("-")[0]) == 4:
         try:
-            return pd.to_datetime(val_str, format="%Y-%m-%d")
+            dt = pd.to_datetime(val_str, format="%Y-%m-%d", errors="coerce")
+            if pd.notnull(dt):
+                return dt
         except:
             pass
             
+    # Formato DD/MM/YYYY
     try:
         parti = val_str.split("/")
         if len(parti) == 3:
             giorno, mese, anno = int(parti[0]), int(parti[1]), int(parti[2])
-            return datetime.datetime(anno, mese, giorno)
+            return pd.Timestamp(datetime.datetime(anno, mese, giorno))
     except:
         pass
         
@@ -1026,7 +1025,6 @@ with tab3:
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
 
-        # Rimozione/esclusione delle colonne richieste dalla visualizzazione dell'archivio (ID, Codice_univoco, Mese)
         colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
         df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
@@ -1583,6 +1581,7 @@ with tab4:
 
     df_cal = df.copy()
     if not df_cal.empty:
+        # Conversione e filtraggio sicuri basati su oggetti datetime reali
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
         
