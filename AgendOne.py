@@ -290,8 +290,8 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
-# Funzione per generare il Report PDF raggruppato per Ente e Classe
-def genera_pdf_report(df_report):
+# Funzione per generare il Report PDF raggruppato per Ente e Classe o in Ordine Cronologico
+def genera_pdf_report(df_report, ordina_cronologico=False):
     try:
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -352,33 +352,18 @@ def genera_pdf_report(df_report):
             elements.append(t_summary_ente)
             elements.append(Spacer(1, 10))
 
-        elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente e Classe", subtitle_style))
-        elements.append(Spacer(1, 4))
-        
-        if not df_report.empty:
-            gruppi_ente_classe = defaultdict(lambda: defaultdict(list))
-            for _, row in df_report.iterrows():
-                e_nome = str(row.get("Ente", "")).strip()
-                if not e_nome or e_nome.lower() == "nan":
-                    e_nome = "Non Specificato"
-                
-                c_nome = str(row.get("Classe", "")).strip()
-                if not c_nome or c_nome.lower() == "nan":
-                    c_nome = "Non Specificata"
-                    
-                gruppi_ente_classe[e_nome][c_nome].append(row)
-                
-            col_widths = [60, 75, 120, 100, 75, 220, 52]
-
-            for ente_nome, classi_dict in gruppi_ente_classe.items():
-                elements.append(Paragraph(f"Ente: <b>{ente_nome}</b>", ente_header_style))
-                
+        if ordina_cronologico:
+            elements.append(Paragraph("Elenco Dettagliato Attività in Ordine Cronologico (Orario di Lavoro)", subtitle_style))
+            elements.append(Spacer(1, 4))
+            
+            if not df_report.empty:
+                col_widths = [60, 75, 100, 120, 75, 220, 52]
                 det_data = [[
                     Paragraph("Data", th_style),
                     Paragraph("Orario", th_style),
+                    Paragraph("Ente", th_style),
                     Paragraph("Classe / Committente", th_style),
                     Paragraph("Sede", th_style),
-                    Paragraph("Modalità", th_style),
                     Paragraph("Note / Dettagli", th_style),
                     Paragraph("Ore", th_style)
                 ]]
@@ -393,80 +378,158 @@ def genera_pdf_report(df_report):
                     ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f1f5f9')),
                 ]
                 
-                totale_ore_ente = 0.0
-                row_idx = 1
+                df_sorted = df_report.copy()
+                if "Data_dt" not in df_sorted.columns:
+                    df_sorted["Data_dt"] = df_sorted["Data"].apply(parse_data_italiana)
+                df_sorted = df_sorted.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
                 
-                for classe_nome in sorted(classi_dict.keys()):
-                    lista_attivita = sorted(
-                        classi_dict[classe_nome],
-                        key=lambda r: (
-                            parse_data_italiana(r.get("Data", "")) if pd.notnull(parse_data_italiana(r.get("Data", ""))) else pd.Timestamp.min,
-                            str(r.get("Orario Inizio", ""))
-                        )
-                    )
-                    totale_ore_classe = 0.0
+                row_idx = 1
+                for _, row in df_sorted.iterrows():
+                    parsed_dt = parse_data_italiana(row.get("Data", ""))
+                    data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                    is_esclusa = bool(row.get("Escludi_Conteggio", False))
+                    ore_val = float(row.get("Ore", 0.0))
                     
-                    for row in lista_attivita:
-                        parsed_dt = parse_data_italiana(row.get("Data", ""))
-                        data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
-                        is_esclusa = bool(row.get("Escludi_Conteggio", False))
-                        ore_val = float(row.get("Ore", 0.0))
-                        
-                        if not is_esclusa:
-                            totale_ore_classe += ore_val
-                            totale_ore_ente += ore_val
-                            ore_str = f"{ore_val:.2f}h"
-                            cur_td_style = td_style
-                            note_str = str(row.get("Note", ""))
-                        else:
-                            ore_str = "0.00h"
-                            cur_td_style = td_excl_style
-                            note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
+                    if not is_esclusa:
+                        ore_str = f"{ore_val:.2f}h"
+                        cur_td_style = td_style
+                        note_str = str(row.get("Note", ""))
+                    else:
+                        ore_str = "0.00h"
+                        cur_td_style = td_excl_style
+                        note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
 
-                        det_data.append([
-                            Paragraph(data_str, cur_td_style),
-                            Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
-                            Paragraph(str(row.get("Classe", "")), cur_td_style),
-                            Paragraph(str(row.get("Sede", "")), cur_td_style),
-                            Paragraph(str(row.get("Modalità", "")), cur_td_style),
-                            Paragraph(note_str, cur_td_style),
-                            Paragraph(ore_str, cur_td_style)
-                        ])
-                        row_idx += 1
-                    
                     det_data.append([
-                        Paragraph(f"<b>Totale parziale ({classe_nome}):</b>", style_subtot_classe),
-                        "", "", "", "", "",
-                        Paragraph(f"<b>{totale_ore_classe:.2f}h</b>", style_subtot_val_classe)
+                        Paragraph(data_str, cur_td_style),
+                        Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
+                        Paragraph(str(row.get("Ente", "")), cur_td_style),
+                        Paragraph(str(row.get("Classe", "")), cur_td_style),
+                        Paragraph(str(row.get("Sede", "")), cur_td_style),
+                        Paragraph(note_str, cur_td_style),
+                        Paragraph(ore_str, cur_td_style)
                     ])
-                    table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
-                    table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
                     row_idx += 1
-
-                det_data.append([
-                    Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
-                    "", "", "", "", "",
-                    Paragraph(f"<b>{totale_ore_ente:.2f}h</b>", ParagraphStyle('SubTotVal', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73')))
-                ])
-                table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
-                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e2e8f0')))
-                row_idx += 1
-
+                
                 t_det = Table(det_data, colWidths=col_widths)
                 t_det.setStyle(TableStyle(table_styles))
                 elements.append(t_det)
                 elements.append(Spacer(1, 8))
+        else:
+            elements.append(Paragraph("Elenco Dettagliato Attività Raggruppate per Ente e Classe", subtitle_style))
+            elements.append(Spacer(1, 4))
             
-            totale_generale = df_validi["Ore"].sum() if not df_validi.empty else 0.0
-            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'), fontSize=10))]], colWidths=[802])
-            t_tot.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
-                ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-                ('TOPPADDING', (0,0), (-1,-1), 6),
-            ]))
-            elements.append(t_tot)
+            if not df_report.empty:
+                gruppi_ente_classe = defaultdict(lambda: defaultdict(list))
+                for _, row in df_report.iterrows():
+                    e_nome = str(row.get("Ente", "")).strip()
+                    if not e_nome or e_nome.lower() == "nan":
+                        e_nome = "Non Specificato"
+                    
+                    c_nome = str(row.get("Classe", "")).strip()
+                    if not c_nome or c_nome.lower() == "nan":
+                        c_nome = "Non Specificata"
+                        
+                    gruppi_ente_classe[e_nome][c_nome].append(row)
+                    
+                col_widths = [60, 75, 120, 100, 75, 220, 52]
+
+                for ente_nome, classi_dict in gruppi_ente_classe.items():
+                    elements.append(Paragraph(f"Ente: <b>{ente_nome}</b>", ente_header_style))
+                    
+                    det_data = [[
+                        Paragraph("Data", th_style),
+                        Paragraph("Orario", th_style),
+                        Paragraph("Classe / Committente", th_style),
+                        Paragraph("Sede", th_style),
+                        Paragraph("Modalità", th_style),
+                        Paragraph("Note / Dettagli", th_style),
+                        Paragraph("Ore", th_style)
+                    ]]
+                    
+                    table_styles = [
+                        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+                        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                        ('TOPPADDING', (0,0), (-1,-1), 4),
+                        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f1f5f9')),
+                    ]
+                    
+                    totale_ore_ente = 0.0
+                    row_idx = 1
+                    
+                    for classe_nome in sorted(classi_dict.keys()):
+                        lista_attivita = sorted(
+                            classi_dict[classe_nome],
+                            key=lambda r: (
+                                parse_data_italiana(r.get("Data", "")) if pd.notnull(parse_data_italiana(r.get("Data", ""))) else pd.Timestamp.min,
+                                str(r.get("Orario Inizio", ""))
+                            )
+                        )
+                        totale_ore_classe = 0.0
+                        
+                        for row in lista_attivita:
+                            parsed_dt = parse_data_italiana(row.get("Data", ""))
+                            data_str = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row.get("Data", ""))
+                            is_esclusa = bool(row.get("Escludi_Conteggio", False))
+                            ore_val = float(row.get("Ore", 0.0))
+                            
+                            if not is_esclusa:
+                                totale_ore_classe += ore_val
+                                totale_ore_ente += ore_val
+                                ore_str = f"{ore_val:.2f}h"
+                                cur_td_style = td_style
+                                note_str = str(row.get("Note", ""))
+                            else:
+                                ore_str = "0.00h"
+                                cur_td_style = td_excl_style
+                                note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
+
+                            det_data.append([
+                                Paragraph(data_str, cur_td_style),
+                                Paragraph(f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}", cur_td_style),
+                                Paragraph(str(row.get("Classe", "")), cur_td_style),
+                                Paragraph(str(row.get("Sede", "")), cur_td_style),
+                                Paragraph(str(row.get("Modalità", "")), cur_td_style),
+                                Paragraph(note_str, cur_td_style),
+                                Paragraph(ore_str, cur_td_style)
+                            ])
+                            row_idx += 1
+                        
+                        det_data.append([
+                            Paragraph(f"<b>Totale parziale ({classe_nome}):</b>", style_subtot_classe),
+                            "", "", "", "", "",
+                            Paragraph(f"<b>{totale_ore_classe:.2f}h</b>", style_subtot_val_classe)
+                        ])
+                        table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
+                        table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
+                        row_idx += 1
+
+                    det_data.append([
+                        Paragraph(f"<b>Totale Ore Parziali ({ente_nome}):</b>", ParagraphStyle('SubTot', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73'))),
+                        "", "", "", "", "",
+                        Paragraph(f"<b>{totale_ore_ente:.2f}h</b>", ParagraphStyle('SubTotVal', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#1c3d73')))
+                    ])
+                    table_styles.append(('SPAN', (0, row_idx), (5, row_idx)))
+                    table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e2e8f0')))
+                    row_idx += 1
+
+                    t_det = Table(det_data, colWidths=col_widths)
+                    t_det.setStyle(TableStyle(table_styles))
+                    elements.append(t_det)
+                    elements.append(Spacer(1, 8))
+        
+        totale_generale = df_validi["Ore"].sum() if not df_validi.empty else 0.0
+        t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'), fontSize=10))]], colWidths=[802])
+        t_tot.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
+            ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+        ]))
+        elements.append(t_tot)
         
         doc.build(elements)
         buffer.seek(0)
@@ -1504,7 +1567,8 @@ with tab3:
             )
 
         with c_exp3:
-            pdf_data = genera_pdf_report(df_report)
+            pdf_cronologico = st.checkbox("Ordine cronologico puro (Orario di lavoro)", value=False, key="chk_pdf_cronologico")
+            pdf_data = genera_pdf_report(df_report, ordina_cronologico=pdf_cronologico)
             if pdf_data:
                 st.download_button(
                     label="Scarica Report PDF",
@@ -1587,7 +1651,6 @@ with tab4:
 
     df_cal = df.copy()
     if not df_cal.empty:
-        # Conversione e filtraggio sicuri basati su oggetti datetime reali
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
         
