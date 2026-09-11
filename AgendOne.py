@@ -1,4 +1,4 @@
-import datetime
+[source: 11]import datetime
 import io
 import json
 import os
@@ -821,12 +821,13 @@ with tab1:
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
-            st.markdown("### Sezione 8 Appuntamenti Multipli")
-            st.caption("Compila le righe desiderate inserendo l'intervallo di orario e il testo associato.")
+            st.markdown("### Appuntamenti Multipli")
+            st.caption("Compila le righe desiderate inserendo l'intervallo di orario e selezionando una classe o inserendo un testo libero.")
             
             righe_multiplo_lista = []
+            opts_classi_multi = [""] + config.get("classi", [])
             for i in range(8):
-                rc1, rc2, rc3, rc4, rc5 = st.columns([0.45, 0.45, 0.45, 0.45, 4.2])
+                rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
                 with rc1:
                     m_ora_i = st.selectbox(f"DaO{i+1}", options=list(range(0, 24)), index=0, key=f"m_ora_i_{i}", label_visibility="collapsed")
                 with rc2:
@@ -835,12 +836,15 @@ with tab1:
                     m_ora_f = st.selectbox(f"AO{i+1}", options=list(range(0, 24)), index=1, key=f"m_ora_f_{i}", label_visibility="collapsed")
                 with rc4:
                     m_min_f = st.selectbox(f"AM{i+1}", options=list(range(0, 60)), index=0, key=f"m_min_f_{i}", label_visibility="collapsed")
-                with rc5:
-                    m_testo = st.text_input(f"Testo {i+1}", placeholder=f"Testo appuntamento {i+1}...", key=f"m_testo_{i}", label_visibility="collapsed")
+                with rc5_sel:
+                    m_classe_sel = st.selectbox(f"Classe{i+1}", options=opts_classi_multi, index=0, key=f"m_classe_sel_{i}", label_visibility="collapsed")
+                with rc5_txt:
+                    m_testo_libero = st.text_input(f"Testo{i+1}", placeholder=f"O testo libero {i+1}...", key=f"m_testo_libero_{i}", label_visibility="collapsed")
                 
-                if m_testo.strip():
+                val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
+                if val_testo_riga:
                     orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
-                    righe_multiplo_lista.append(f"{orario_slot_str} {m_testo.strip()}")
+                    righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
             
             appunto_multiplo = "\n".join(righe_multiplo_lista)
 
@@ -1211,7 +1215,7 @@ with tab3:
 
                 if is_multiplo:
                     st.markdown("---")
-                    st.markdown("### Sezione 8 Appuntamenti Multipli (Modifica)")
+                    st.markdown("### Appuntamenti Multipli (Modifica)")
                     st.caption("Modifica le righe dell'appuntamento multiplo.")
                     
                     parsed_righe = []
@@ -1233,12 +1237,22 @@ with tab3:
                             parsed_righe.append((9, 0, 10, 0, line))
 
                     mod_righe_multiplo_lista = []
+                    opts_classi_multi = [""] + config.get("classi", [])
                     for i in range(8):
-                        default_hi, default_mi, default_hf, default_mf, default_testo = (9, 0, 10, 0, "")
+                        default_hi, default_mi, default_hf, default_mf, default_text = (9, 0, 10, 0, "")
                         if i < len(parsed_righe):
-                            default_hi, default_mi, default_hf, default_mf, default_testo = parsed_righe[i]
+                            default_hi, default_mi, default_hf, default_mf, default_text = parsed_righe[i]
 
-                        rc1, rc2, rc3, rc4, rc5 = st.columns([0.45, 0.45, 0.45, 0.45, 4.2])
+                        def_class_val = ""
+                        def_text_val = ""
+                        if default_text in config.get("classi", []):
+                            def_class_val = default_text
+                        else:
+                            def_text_val = default_text
+
+                        idx_cls = opts_classi_multi.index(def_class_val) if def_class_val in opts_classi_multi else 0
+
+                        rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
                         with rc1:
                             m_ora_i = st.selectbox(f"ModDaO{i+1}", options=list(range(0, 24)), index=default_hi if default_hi in range(0, 24) else 0, key=f"mod_m_ora_i_{i}", label_visibility="collapsed")
                         with rc2:
@@ -1247,12 +1261,15 @@ with tab3:
                             m_ora_f = st.selectbox(f"ModAO{i+1}", options=list(range(0, 24)), index=default_hf if default_hf in range(0, 24) else 1, key=f"mod_m_ora_f_{i}", label_visibility="collapsed")
                         with rc4:
                             m_min_f = st.selectbox(f"ModAM{i+1}", options=list(range(0, 60)), index=default_mf if default_mf in range(0, 60) else 0, key=f"mod_m_min_f_{i}", label_visibility="collapsed")
-                        with rc5:
-                            m_testo = st.text_input(f"ModTesto {i+1}", value=default_testo, placeholder=f"Testo appuntamento {i+1}...", key=f"mod_m_testo_{i}", label_visibility="collapsed")
+                        with rc5_sel:
+                            m_classe_sel = st.selectbox(f"ModClasse{i+1}", options=opts_classi_multi, index=idx_cls, key=f"mod_m_classe_sel_{i}", label_visibility="collapsed")
+                        with rc5_txt:
+                            m_testo_libero = st.text_input(f"ModTesto{i+1}", value=def_text_val, placeholder=f"O testo libero {i+1}...", key=f"mod_m_testo_libero_{i}", label_visibility="collapsed")
                         
-                        if m_testo.strip():
+                        val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
+                        if val_testo_riga:
                             orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
-                            mod_righe_multiplo_lista.append(f"{orario_slot_str} {m_testo.strip()}")
+                            mod_righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
                     
                     mod_appunto_multiplo = "\n".join(mod_righe_multiplo_lista)
                 else:
@@ -1539,7 +1556,7 @@ with tab4:
             st.session_state["cal_anno"] -= 1
             st.rerun()
     with col_nav2:
-        if st.button("< Mese -", use_container_width=True):
+        if st.button("< Mese -", use_keyword=True):
             if st.session_state["cal_mese"] == 1:
                 st.session_state["cal_mese"] = 12
                 st.session_state["cal_anno"] -= 1
@@ -1561,201 +1578,3 @@ with tab4:
         if st.button("Anno + >>", use_container_width=True):
             st.session_state["cal_anno"] += 1
             st.rerun()
-
-    st.markdown("---")
-
-    df_cal = df.copy()
-    if not df_cal.empty:
-        df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
-        df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
-        
-        df_mese = df_cal[
-            (df_cal["Data_dt"].notna()) & 
-            (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
-            (df_cal["Data_dt"].dt.month == st.session_state["cal_mese"])
-        ]
-    else:
-        df_mese = pd.DataFrame()
-
-    num_appuntamenti_mensili = len(df_mese)
-    df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
-    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_ore_valide.empty else 0.0
-
-    st.markdown(
-        f"""
-        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
-            <div style="background-color: #1c3d73; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
-                <span style="font-size: 14px; opacity: 0.8;">Numero Appuntamenti Mensili</span><br>
-                <span style="font-size: 22px; font-weight: bold;">{num_appuntamenti_mensili}</span>
-            </div>
-            <div style="background-color: #155c32; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
-                <span style="font-size: 14px; opacity: 0.8;">Ore Appuntamenti Mensili (Valide)</span><br>
-                <span style="font-size: 22px; font-weight: bold;">{ore_appuntamenti_mensili:.2f} h</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    import calendar
-    cal = calendar.Calendar(firstweekday=0)
-    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-    
-    impegni_per_giorno = {}
-    if not df_mese.empty:
-        for _, row in df_mese.iterrows():
-            giorno_num = row["Data_dt"].day
-            if giorno_num not in impegni_per_giorno:
-                impegni_per_giorno[giorno_num] = []
-            
-            impegni_per_giorno[giorno_num].append({
-                "ente": str(row.get("Ente", "")),
-                "classe": str(row.get("Classe", "")),
-                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
-                "ore": row.get("Ore", 0.0),
-                "sede": str(row.get("Sede", "")),
-                "modalita": str(row.get("Modalità", "")),
-                "note": str(row.get("Note", "")),
-                "svolto": bool(row.get("Svolto", False)),
-                "escluso": bool(row.get("Escludi_Conteggio", False))
-            })
-
-    html_righe = ""
-    for settimana in giorni_mese:
-        html_righe += "<tr>"
-        for giorno in settimana:
-            if giorno == 0:
-                html_righe += '<td class="cal-cell-empty"></td>'
-            else:
-                ha_impegni = giorno in impegni_per_giorno
-                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
-                
-                html_righe += f'<td class="cal-cell" style="{bg_style}">'
-                html_righe += f'<div class="day-number">{giorno}</div>'
-
-                if ha_impegni:
-                    lista_imp = impegni_per_giorno[giorno]
-                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b>"
-                    dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
-                    
-                    for imp in lista_imp:
-                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
-                        escl_nota = " [Escluso]" if imp["escluso"] else ""
-                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
-                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
-                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
-                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
-                        if imp['note']:
-                            dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
-                        dettaglio_html += "</div>"
-
-                    html_righe += '<div class="tooltip-container">'
-                    if len(lista_imp) == 1:
-                        imp_singolo = lista_imp[0]
-                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
-                        html_righe += f'<span class="badge-impegno">{testo_badge}</span>'
-                    else:
-                        html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
-                    
-                    html_righe += f'<div class="tooltip-content">{dettaglio_html}</div>'
-                    html_righe += '</div>'
-
-                html_righe += '</td>'
-        html_righe += "</tr>"
-
-    th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
-
-    html_cal = f"""
-    <style>
-      .cal-table {{
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-      }}
-      .cal-th {{
-        background-color: #1c3d73;
-        color: white;
-        text-align: center;
-        padding: 10px;
-        font-size: 14px;
-        border: 1px solid #333333;
-      }}
-      .cal-cell {{
-        height: 90px;
-        vertical-align: top;
-        padding: 6px;
-        border: 1px solid #444444;
-        background-color: #1e1e1e;
-        position: relative;
-      }}
-      .cal-cell-empty {{
-        background-color: #121212;
-        border: 1px solid #2a2a2a;
-        height: 90px;
-      }}
-      .day-number {{
-        font-weight: bold;
-        font-size: 13px;
-        color: #ffffff;
-        margin-bottom: 4px;
-      }}
-      .badge-impegno {{
-        background-color: #2fa866;
-        color: white;
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 4px;
-        display: block;
-        margin-bottom: 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }}
-      .badge-impegno-multi {{
-        background-color: #c0392b;
-        color: white;
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 4px;
-        display: block;
-        margin-bottom: 2px;
-        text-align: center;
-        font-weight: bold;
-      }}
-      .tooltip-container {{
-        position: relative;
-        display: block;
-        cursor: pointer;
-      }}
-      .tooltip-content {{
-        visibility: hidden;
-        width: 260px;
-        background-color: #2c3e50;
-        color: #fff;
-        text-align: left;
-        border-radius: 6px;
-        padding: 8px 10px;
-        position: absolute;
-        z-index: 100;
-        bottom: 125%;
-        left: 50%;
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.3s;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-        font-size: 12px;
-        line-height: 1.4;
-      }}
-      .tooltip-container:hover .tooltip-content {{
-        visibility: visible;
-        opacity: 1;
-      }}
-    </style>
-    <table class="cal-table">
-      <tr>{th_html}</tr>
-      {html_righe}
-    </table>
-    """
-
-    st.markdown(html_cal, unsafe_allow_html=True)
