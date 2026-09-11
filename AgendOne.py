@@ -397,7 +397,13 @@ def genera_pdf_report(df_report):
                 row_idx = 1
                 
                 for classe_nome in sorted(classi_dict.keys()):
-                    lista_attivita = classi_dict[classe_nome]
+                    lista_attivita = sorted(
+                        classi_dict[classe_nome],
+                        key=lambda r: (
+                            parse_data_italiana(r.get("Data", "")) if pd.notnull(parse_data_italiana(r.get("Data", ""))) else pd.Timestamp.min,
+                            str(r.get("Orario Inizio", ""))
+                        )
+                    )
                     totale_ore_classe = 0.0
                     
                     for row in lista_attivita:
@@ -1595,7 +1601,7 @@ with tab4:
 
     num_appuntamenti_mensili = len(df_mese)
     df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
-    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_ore_valide.empty else 0.0
+    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_mese.empty else 0.0
 
     st.markdown(
         f"""
