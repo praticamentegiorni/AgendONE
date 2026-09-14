@@ -462,7 +462,7 @@ def genera_pdf_report(df_report):
                 [[
                     Paragraph(
                         f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", 
-                        ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10)
+                        ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'), fontSize=10)
                     )
                 ]], 
                 colWidths=[802]
