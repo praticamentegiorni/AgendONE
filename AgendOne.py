@@ -458,7 +458,15 @@ def genera_pdf_report(df_report):
                 elements.append(Spacer(1, 8))
             
             totale_generale = df_validi["Ore"].sum() if not df_validi.empty else 0.0
-            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10))]], colWidths=[802])
+            t_tot = Table(
+                [[
+                    Paragraph(
+                        f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", 
+                        ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10)
+                    )
+                ]], 
+                colWidths=[802]
+            )
             t_tot.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
                 ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
