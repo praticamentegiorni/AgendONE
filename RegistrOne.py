@@ -1,8 +1,7 @@
 import datetime
-import json
-import os
 import pandas as pd
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 # Impostazione pagina
 st.set_page_config(page_title="RegistrOne - Registro di Classe", layout="wide")
@@ -52,38 +51,63 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-DB_FILE = "registrone_db.json"
+# Connessione a Google Sheets dedicata a RegistrOne_DB
+try:
+  conn = st.connection("gsheets_registrone", type=GSheetsConnection)
+except Exception as e:
+  st.error(
+      "Errore nella configurazione della connessione Google Sheets nel file"
+      f" secrets: {e}"
+  )
+  st.stop()
 
 
-def carica_dati():
-  if os.path.exists(DB_FILE):
-    try:
-      with open(DB_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-    except:
-      pass
-  # Struttura dati iniziale pulita (senza classi di prova)
-  return {
-      "classi": [],
-      "materie": ["Informatica", "Laboratorio", "Sistemi e Reti"],
-      "scuole_provenienza": [
-          "Scuola Media Statale",
-          "Altro Istituto Professionale",
-          "Liceo Scientifico",
-      ],
-      "alunni": [],
-      "presenze": [],
-      "voti": [],
-      "note": [],
-  }
+def carica_tabella(worksheet_name):
+  """Legge un foglio specifico da Google Sheets e restituisce un DataFrame pulito."""
+  try:
+    df = conn.read(worksheet=worksheet_name, ttl=0)
+    # Rimuove righe completamente vuote
+    df = df.dropna(how="all")
+    return df
+  except Exception as e:
+    # Se il foglio è vuoto o non ancora popolato, restituisce un DataFrame vuoto
+    return pd.DataFrame()
 
 
-def salva_dati(data):
-  with open(DB_FILE, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+def salva_tabella(df, worksheet_name):
+  """Sovrascrive il foglio Google Sheets con i dati aggiornati del DataFrame."""
+  try:
+    conn.update(worksheet=worksheet_name, data=df)
+    st.cache_data.clear()
+  except Exception as e:
+    st.error(f"Errore durante il salvataggio sul foglio {worksheet_name}: {e}")
 
 
-db = carica_dati()
+# --- CARICAMENTO DATI DAL DATABASE GOOGLE SHEETS ---
+df_classi = carica_tabella("Classi")
+df_alunni = carica_tabella("Alunni")
+df_presenze = carica_tabella("Presenze")
+df_voti = carica_tabella("Voti")
+df_note = carica_tabella("Note")
+df_materie = carica_tabella("Materie")
+df_scuole = carica_tabella("Scuole")
+
+# Liste di supporto estratte dai DataFrame
+lista_classi = (
+    df_classi["nome_classe"].dropna().astype(str).tolist()
+    if not df_classi.empty and "nome_classe" in df_classi.columns
+    else []
+)
+lista_materie = (
+    df_materie["Materia"].dropna().astype(str).tolist()
+    if not df_materie.empty and "Materia" in df_materie.columns
+    else []
+)
+lista_scuole = (
+    df_scuole["Scuola"].dropna().astype(str).tolist()
+    if not df_scuole.empty and "Scuola" in df_scuole.columns
+    else []
+)
 
 # --- INTESTAZIONE PRINCIPALE ---
 st.title("📚 RegistrOne - Registro di Classe Professionale")
@@ -107,8 +131,8 @@ with tabs[0]:
 
   with col1:
     st.markdown("### Elenco Classi Attive")
-    if db["classi"]:
-      for idx, c in enumerate(db["classi"]):
+    if lista_classi:
+      for c in lista_classi:
         st.info(f"📁 **{c}**")
     else:
       st.warning(
@@ -120,20 +144,24 @@ with tabs[0]:
     st.markdown("### Aggiungi Classe")
     nuova_classe = st.text_input("Nome Classe (es. 1A Informatica)")
     if st.button("Crea Classe"):
-      if nuova_classe and nuova_classe not in db["classi"]:
-        db["classi"].append(nuova_classe)
-        salva_dati(db)
+      if nuova_classe and nuova_classe not in lista_classi:
+        nuovo_id = str(len(df_classi) + 1)
+        nuova_riga = pd.DataFrame(
+            [{"id_classe": nuovo_id, "nome_classe": nuova_classe}]
+        )
+        df_classi = pd.concat([df_classi, nuova_riga], ignore_index=True)
+        salva_tabella(df_classi, "Classi")
         st.success(f"Classe {nuova_classe} aggiunta con successo!")
         st.rerun()
       else:
         st.error("Inserisci un nome valido o già esistente.")
 
   # Sezione di Modifica ed Eliminazione Classi esistenti
-  if db["classi"]:
+  if lista_classi:
     st.markdown("---")
     st.markdown("### Modifica o Elimina Classe Esistente")
     classe_selezionata_gestione = st.selectbox(
-        "Seleziona classe", db["classi"], key="ges_cl"
+        "Seleziona classe", lista_classi, key="ges_cl"
     )
 
     col_m1, col_m2 = st.columns(2)
@@ -142,18 +170,21 @@ with tabs[0]:
           "Rinomina classe", value=classe_selezionata_gestione
       )
       if st.button("Aggiorna Nome Classe"):
-        if (
-            nuovo_nome_classe
-            and nuovo_nome_classe not in db["classi"]
-        ):
-          # Aggiorna il nome della classe sia nella lista che negli alunni associati
+        if nuovo_nome_classe and nuovo_nome_classe not in lista_classi:
           vecchio_nome = classe_selezionata_gestione
-          idx = db["classi"].index(vecchio_nome)
-          db["classi"][idx] = nuovo_nome_classe
-          for al in db["alunni"]:
-            if al["classe"] == vecchio_nome:
-              al["classe"] = nuovo_nome_classe
-          salva_dati(db)
+          # Aggiorna nel DataFrame Classi
+          df_classi.loc[
+              df_classi["nome_classe"] == vecchio_nome, "nome_classe"
+          ] = nuovo_nome_classe
+          salva_tabella(df_classi, "Classi")
+
+          # Aggiorna il nome della classe anche nel DataFrame Alunni associati
+          if not df_alunni.empty and "classe" in df_alunni.columns:
+            df_alunni.loc[df_alunni["classe"] == vecchio_nome, "classe"] = (
+                nuovo_nome_classe
+            )
+            salva_tabella(df_alunni, "Alunni")
+
           st.success("Classe aggiornata con successo!")
           st.rerun()
         else:
@@ -164,17 +195,25 @@ with tabs[0]:
       st.write("")
       if st.button("Elimina Classe", type="primary"):
         # Controllo se ci sono alunni associati a questa classe
-        alunni_nella_classe = [
-            a for a in db["alunni"] if a["classe"] == classe_selezionata_gestione
-        ]
+        alunni_nella_classe = (
+            [
+                a
+                for a in df_alunni.to_dict("records")
+                if a.get("classe") == classe_selezionata_gestione
+            ]
+            if not df_alunni.empty and "classe" in df_alunni.columns
+            else []
+        )
         if alunni_nella_classe:
           st.error(
               "Impossibile eliminare la classe: contiene ancora studenti"
               " iscritti. Sposta o elimina prima gli studenti."
           )
         else:
-          db["classi"].remove(classe_selezionata_gestione)
-          salva_dati(db)
+          df_classi = df_classi[
+              df_classi["nome_classe"] != classe_selezionata_gestione
+          ]
+          salva_tabella(df_classi, "Classi")
           st.success("Classe eliminata.")
           st.rerun()
 
@@ -184,14 +223,14 @@ with tabs[0]:
 with tabs[1]:
   st.subheader("Gestione Anagrafica Studenti")
 
-  if not db["classi"]:
+  if not lista_classi:
     st.warning(
         "Prima di inserire alunni, devi creare almeno una classe nella scheda"
         " 'Gestione Classi'."
     )
   else:
     classe_filtro = st.selectbox(
-        "Seleziona Classe per Anagrafica", ["Tutte"] + db["classi"]
+        "Seleziona Classe per Anagrafica", ["Tutte"] + lista_classi
     )
 
     with st.expander(
@@ -202,7 +241,7 @@ with tabs[1]:
         with col_a:
           nome = st.text_input("Nome")
           cognome = st.text_input("Cognome")
-          classe_assegnata = st.selectbox("Classe", db["classi"])
+          classe_assegnata = st.selectbox("Classe", lista_classi)
           data_ins = st.date_input(
               "Data Inserimento", datetime.date.today()
           ).strftime("%Y-%m-%d")
@@ -210,7 +249,8 @@ with tabs[1]:
         with col_b:
           altra_scuola = st.checkbox("Provenienza da altra scuola")
           scuola_prec = st.selectbox(
-              "Scuola di provenienza", db["scuole_provenienza"]
+              "Scuola di provenienza",
+              lista_scuole if lista_scuole else ["Nessuna"],
           )
           parla_italiano = st.selectbox(
               "Parla la lingua italiana?", ["Sì", "No / Parzialmente"]
@@ -242,70 +282,78 @@ with tabs[1]:
 
         submitted = st.form_submit_button("Salva Alunno")
         if submitted and nome and cognome:
-          nuovo_alunno = {
-              "id": str(len(db["alunni"]) + 1)
-              + "_"
-              + datetime.datetime.now().strftime("%s"),
+          nuovo_id = str(len(df_alunni) + 1) + "_" + str(int(datetime.datetime.now().timestamp()))
+          nuovo_alunno_dict = {
+              "id": nuovo_id,
               "nome": nome,
               "cognome": cognome,
               "classe": classe_assegnata,
               "data_inserimento": data_ins,
-              "dimesso": dimesso,
+              "dimesso": str(dimesso),
               "motivo_dimissione": motivo_dim if dimesso else "",
-              "altra_scuola": altra_scuola,
+              "altra_scuola": str(altra_scuola),
               "scuola_prec": scuola_prec if altra_scuola else "",
               "parla_italiano": parla_italiano,
               "provenienza_orig": provenienza_orig,
               "famiglia_comunita": famiglia_comunita,
-              "problemi_apprendimento": problemi_apprendimento,
+              "problemi_apprendimento": str(problemi_apprendimento),
               "dettagli_apprendimento": dettagli_app
               if problemi_apprendimento
               else "",
               "nota_testo": nota_testo,
           }
-          db["alunni"].append(nuovo_alunno)
-          salva_dati(db)
+          df_alunni = pd.concat(
+              [df_alunni, pd.DataFrame([nuovo_alunno_dict])], ignore_index=True
+          )
+          salva_tabella(df_alunni, "Alunni")
           st.success(f"Alunno {nome} {cognome} salvato con successo!")
           st.rerun()
 
     st.markdown("### Elenco Studenti Registrati")
+    records_alunni = (
+        df_alunni.to_dict("records")
+        if not df_alunni.empty and "id" in df_alunni.columns
+        else []
+    )
     alunni_filtrati = (
-        db["alunni"]
+        records_alunni
         if classe_filtro == "Tutte"
-        else [a for a in db["alunni"] if a["classe"] == classe_filtro]
+        else [
+            a for a in records_alunni if str(a.get("classe")) == classe_filtro
+        ]
     )
 
     if alunni_filtrati:
-      df_alunni = pd.DataFrame(alunni_filtrati)
-      st.dataframe(
-          df_alunni[
-              [
-                  "nome",
-                  "cognome",
-                  "classe",
-                  "dimesso",
-                  "parla_italiano",
-                  "famiglia_comunita",
-              ]
-          ],
-          use_container_width=True,
-      )
+      df_mostra = pd.DataFrame(alunni_filtrati)
+      colonne_visibili = [
+          c
+          for c in [
+              "nome",
+              "cognome",
+              "classe",
+              "dimesso",
+              "parla_italiano",
+              "famiglia_comunita",
+          ]
+          if c in df_mostra.columns
+      ]
+      st.dataframe(df_mostra[colonne_visibili], use_container_width=True)
 
       st.markdown("---")
       scelta_alunno = st.selectbox(
           "Seleziona studente per dettagli o eliminazione",
           options=alunni_filtrati,
-          format_func=lambda x: f"{x['cognome']} {x['nome']} ({x['classe']})",
+          format_func=lambda x: f"{x.get('cognome', '')} {x.get('nome', '')} ({x.get('classe', '')})",
       )
       if scelta_alunno:
         with st.expander(
-            f"Scheda Dettaglio: {scelta_alunno['cognome']} {scelta_alunno['nome']}"
+            f"Scheda Dettaglio: {scelta_alunno.get('cognome')} {scelta_alunno.get('nome')}"
         ):
           st.write(
               f"**Data Inserimento:** {scelta_alunno.get('data_inserimento', 'N/D')}"
           )
           st.write(
-              f"**Provenienza Altra Scuola:** {'Sì (' + scelta_alunno.get('scuola_prec','') + ')' if scelta_alunno.get('altra_scuola') else 'No'}"
+              f"**Provenienza Altra Scuola:** {'Sì (' + str(scelta_alunno.get('scuola_prec','')) + ')' if str(scelta_alunno.get('altra_scuola'))=='True' else 'No'}"
           )
           st.write(
               f"**Parla Italiano:** {scelta_alunno.get('parla_italiano', 'Sì')}"
@@ -317,18 +365,17 @@ with tabs[1]:
               f"**Abitazione:** {scelta_alunno.get('famiglia_comunita', 'Famiglia')}"
           )
           st.write(
-              f"**Problemi Apprendimento:** {'Sì - ' + scelta_alunno.get('dettagli_apprendimento','') if scelta_alunno.get('problemi_apprendimento') else 'No'}"
+              f"**Problemi Apprendimento:** {'Sì - ' + str(scelta_alunno.get('dettagli_apprendimento','')) if str(scelta_alunno.get('problemi_apprendimento'))=='True' else 'No'}"
           )
           st.write(
-              f"**Dimesso:** {'Sì (Motivo: ' + scelta_alunno.get('motivo_dimissione','') + ')' if scelta_alunno.get('dimesso') else 'No'}"
+              f"**Dimesso:** {'Sì (Motivo: ' + str(scelta_alunno.get('motivo_dimissione','')) + ')' if str(scelta_alunno.get('dimesso'))=='True' else 'No'}"
           )
           st.info(f"**Note:** {scelta_alunno.get('nota_testo', '')}")
 
           if st.button("Elimina Alunno", type="primary"):
-            db["alunni"] = [
-                a for a in db["alunni"] if a["id"] != scelta_alunno["id"]
-            ]
-            salva_dati(db)
+            id_da_rimuovere = str(scelta_alunno.get("id"))
+            df_alunni = df_alunni[df_alunni["id"].astype(str) != id_da_rimuovere]
+            salva_tabella(df_alunni, "Alunni")
             st.success("Alunno eliminato.")
             st.rerun()
     else:
@@ -340,14 +387,14 @@ with tabs[1]:
 with tabs[2]:
   st.subheader("Registro Presenze e Assenze Giornaliere")
 
-  if not db["classi"]:
+  if not lista_classi:
     st.warning("Crea prima almeno una classe.")
   else:
     c_sel_cl, c_sel_dt = st.columns(2)
     with c_sel_cl:
       classe_pres = st.selectbox(
           "Seleziona Classe per Registro",
-          db["classi"],
+          lista_classi,
           key="pres_classe_selezionata",
       )
     with c_sel_dt:
@@ -355,30 +402,45 @@ with tabs[2]:
           "Data Registro", datetime.date.today()
       ).strftime("%Y-%m-%d")
 
-    alunni_classe = [a for a in db["alunni"] if a["classe"] == classe_pres]
+    records_alunni_tutti = (
+        df_alunni.to_dict("records")
+        if not df_alunni.empty and "id" in df_alunni.columns
+        else []
+    )
+    alunni_classe = [
+        a for a in records_alunni_tutti if str(a.get("classe")) == classe_pres
+    ]
 
     if alunni_classe:
       st.markdown(f"### Appello del giorno: {data_registro}")
       with st.form("form_appello"):
         stili_presenza = {}
+        records_presenze = (
+            df_presenze.to_dict("records")
+            if not df_presenze.empty and "alunno_id" in df_presenze.columns
+            else []
+        )
+
         for al in alunni_classe:
           esistente = next(
               (
                   p
-                  for p in db["presenze"]
-                  if p["alunno_id"] == al["id"] and p["data"] == data_registro
+                  for p in records_presenze
+                  if str(p.get("alunno_id")) == str(al["id"])
+                  and str(p.get("data")) == data_registro
               ),
               None,
           )
           idx_default = 0
           if esistente:
-            if esistente["stato"] == "Assente":
+            stato_esistente = str(esistente.get("stato"))
+            if stato_esistente == "Assente":
               idx_default = 1
-            elif esistente["stato"] == "Giustificato":
+            elif stato_esistente == "Giustificato":
               idx_default = 2
 
           stili_presenza[al["id"]] = st.selectbox(
-              f"{al['cognome']} {al['nome']}",
+              f"{al.get('cognome', '')} {al.get('nome', '')}",
               ["Presente", "Assente", "Giustificato"],
               index=idx_default,
               key=f"pres_{al['id']}",
@@ -386,19 +448,33 @@ with tabs[2]:
 
         salva_appello = st.form_submit_button("Registra Presenze Giornaliere")
         if salva_appello:
-          db["presenze"] = [
-              p
-              for p in db["presenze"]
-              if not (
-                  p["data"] == data_registro
-                  and p["alunno_id"] in [a["id"] for a in alunni_classe]
-              )
-          ]
+          # Rimuove le vecchie presenze di questa classe per questa data
+          if not df_presenze.empty and "data" in df_presenze.columns:
+            ids_classe = [str(a["id"]) for a in alunni_classe]
+            df_presenze = df_presenze[
+                ~(
+                    (df_presenze["data"].astype(str) == data_registro)
+                    & (
+                        df_presenze["alunno_id"]
+                        .astype(str)
+                        .isin(ids_classe)
+                    )
+                )
+            ]
+
+          nuove_presenze_list = []
           for al_id, stato in stili_presenza.items():
-            db["presenze"].append(
-                {"alunno_id": al_id, "data": data_registro, "stato": stato}
-            )
-          salva_dati(db)
+            nuove_presenze_list.append({
+                "alunno_id": str(al_id),
+                "data": data_registro,
+                "stato": stato,
+            })
+
+          df_presenze = pd.concat(
+              [df_presenze, pd.DataFrame(nuove_presenze_list)],
+              ignore_index=True,
+          )
+          salva_tabella(df_presenze, "Presenze")
           st.success("Presenze salvate correttamente!")
 
       st.markdown("---")
@@ -417,18 +493,23 @@ with tabs[2]:
             f" {classe_pres}:**"
         )
         report_assenze = []
+        records_presenze_tot = (
+            df_presenze.to_dict("records")
+            if not df_presenze.empty and "alunno_id" in df_presenze.columns
+            else []
+        )
         for al in alunni_classe:
           tot_assenze = sum(
               1
-              for p in db["presenze"]
-              if p["alunno_id"] == al["id"]
-              and p["stato"] == "Assente"
+              for p in records_presenze_tot
+              if str(p.get("alunno_id")) == str(al["id"])
+              and str(p.get("stato")) == "Assente"
               and data_inizio.strftime("%Y-%m-%d")
-              <= p["data"]
+              <= str(p.get("data"))
               <= data_fine.strftime("%Y-%m-%d")
           )
           report_assenze.append({
-              "Alunno": f"{al['cognome']} {al['nome']}",
+              "Alunno": f"{al.get('cognome', '')} {al.get('nome', '')}",
               "Giorni Assente": tot_assenze,
           })
         st.table(pd.DataFrame(report_assenze))
@@ -441,13 +522,20 @@ with tabs[2]:
 with tabs[3]:
   st.subheader("Gestione Voti e Note Disciplinari")
 
-  if not db["classi"]:
+  if not lista_classi:
     st.warning("Crea prima almeno una classe.")
   else:
     classe_voti = st.selectbox(
-        "Seleziona Classe", db["classi"], key="classe_voti_sel"
+        "Seleziona Classe", lista_classi, key="classe_voti_sel"
     )
-    alunni_voti = [a for a in db["alunni"] if a["classe"] == classe_voti]
+    records_alunni_voti = (
+        df_alunni.to_dict("records")
+        if not df_alunni.empty and "id" in df_alunni.columns
+        else []
+    )
+    alunni_voti = [
+        a for a in records_alunni_voti if str(a.get("classe")) == classe_voti
+    ]
 
     if alunni_voti:
       tab_v, tab_n = st.tabs(
@@ -459,11 +547,13 @@ with tabs[3]:
           alunno_selezionato = st.selectbox(
               "Studente",
               alunni_voti,
-              format_func=lambda x: f"{x['cognome']} {x['nome']}",
+              format_func=lambda x: f"{x.get('cognome', '')} {x.get('nome', '')}",
           )
           col_v1, col_v2 = st.columns(2)
           with col_v1:
-            materia_scelta = st.selectbox("Materia", db["materie"])
+            materia_scelta = st.selectbox(
+                "Materia", lista_materie if lista_materie else ["Generale"]
+            )
             voto_num = st.slider(
                 "Voto", min_value=3, max_value=10, value=6, step=1
             )
@@ -477,25 +567,35 @@ with tabs[3]:
             )
 
           if st.form_submit_button("Assegna Voto"):
-            db["voti"].append({
-                "alunno_id": alunno_selezionato["id"],
+            nuovo_voto = {
+                "alunno_id": str(alunno_selezionato["id"]),
                 "materia": materia_scelta,
-                "voto": voto_num,
+                "voto": str(voto_num),
                 "data": data_voto,
                 "nota_voto": nota_voto,
-            })
-            salva_dati(db)
+            }
+            df_voti = pd.concat(
+                [df_voti, pd.DataFrame([nuovo_voto])], ignore_index=True
+            )
+            salva_tabella(df_voti, "Voti")
             st.success("Voto inserito con successo!")
 
         st.markdown("### Storico Voti Studente Selezionato")
         st_sel_storico = st.selectbox(
             "Seleziona studente per visualizzare i voti",
             alunni_voti,
-            format_func=lambda x: f"{x['cognome']} {x['nome']}",
+            format_func=lambda x: f"{x.get('cognome', '')} {x.get('nome', '')}",
             key="storico_voti",
         )
+        records_voti = (
+            df_voti.to_dict("records")
+            if not df_voti.empty and "alunno_id" in df_voti.columns
+            else []
+        )
         voti_studente = [
-            v for v in db["voti"] if v["alunno_id"] == st_sel_storico["id"]
+            v
+            for v in records_voti
+            if str(v.get("alunno_id")) == str(st_sel_storico["id"])
         ]
         if voti_studente:
           st.dataframe(pd.DataFrame(voti_studente), use_container_width=True)
@@ -507,7 +607,7 @@ with tabs[3]:
           alunno_nota = st.selectbox(
               "Studente",
               alunni_voti,
-              format_func=lambda x: f"{x['cognome']} {x['nome']}",
+              format_func=lambda x: f"{x.get('cognome', '')} {x.get('nome', '')}",
               key="al_nota",
           )
           tipo_nota = st.selectbox(
@@ -519,31 +619,44 @@ with tabs[3]:
           ).strftime("%Y-%m-%d")
 
           if st.form_submit_button("Registra Nota"):
-            db["note"].append({
-                "alunno_id": alunno_nota["id"],
+            nuova_nota = {
+                "alunno_id": str(alunno_nota["id"]),
                 "tipo": tipo_nota,
                 "descrizione": desc_nota,
                 "data": data_nota,
-            })
-            salva_dati(db)
+            }
+            df_note = pd.concat(
+                [df_note, pd.DataFrame([nuova_nota])], ignore_index=True
+            )
+            salva_tabella(df_note, "Note")
             st.success("Nota registrata!")
 
         st.markdown("### Elenco Note per Studente")
         st_nota_storico = st.selectbox(
             "Seleziona studente per note",
             alunni_voti,
-            format_func=lambda x: f"{x['cognome']} {x['nome']}",
+            format_func=lambda x: f"{x.get('cognome', '')} {x.get('nome', '')}",
             key="storico_note",
         )
+        records_note = (
+            df_note.to_dict("records")
+            if not df_note.empty and "alunno_id" in df_note.columns
+            else []
+        )
         note_studente = [
-            n for n in db["note"] if n["alunno_id"] == st_nota_storico["id"]
+            n
+            for n in records_note
+            if str(n.get("alunno_id")) == str(st_nota_storico["id"])
         ]
         if note_studente:
           for n in note_studente:
-            if n["tipo"] == "Merito":
-              st.success(f"[{n['data']}] **{n['tipo']}**: {n['descrizione']}")
+            tipo = str(n.get("tipo", ""))
+            data = str(n.get("data", ""))
+            desc = str(n.get("descrizione", ""))
+            if "Merito" in tipo:
+              st.success(f"[{data}] **{tipo}**: {desc}")
             else:
-              st.error(f"[{n['data']}] **{n['tipo']}**: {n['descrizione']}")
+              st.error(f"[{data}] **{tipo}**: {desc}")
         else:
           st.info("Nessuna nota registrata.")
     else:
@@ -553,34 +666,65 @@ with tabs[3]:
 # 5. TABELLE & CONFIGURAZIONE
 # ==========================================
 with tabs[4]:
-  st.subheader("Gestione Tabelle di Configurazione")
+  st.subheader("Gestione Tabelle di Configurazione (Google Sheets)")
 
   col_t1, col_t2 = st.columns(2)
 
   with col_t1:
-    st.markdown("### 📚 Gestione Materie")
-    nuova_materia = st.text_input("Nome Materia")
-    if st.button("Aggiungi Materia"):
-      if nuova_materia and nuova_materia not in db["materie"]:
-        db["materie"].append(nuova_materia)
-        salva_dati(db)
-        st.success("Materia aggiunta!")
-        st.rerun()
+    st.markdown("### 📚 Materie (Docenti e Co-docenti)")
+    with st.form("form_aggiungi_materia"):
+      materia_nom = st.text_input("Nome Materia")
+      docente_nom = st.text_input("Docente")
+      codocente_nom = st.text_input("Co-Docente (opzionale)")
+      if st.form_submit_button("Aggiungi Materia"):
+        if materia_nom:
+          nuova_materia_row = {
+              "Materia": materia_nom,
+              "Docente": docente_nom,
+              "CoDocente": codocente_nom,
+          }
+          df_materie = pd.concat(
+              [df_materie, pd.DataFrame([nuova_materia_row])],
+              ignore_index=True,
+          )
+          salva_tabella(df_materie, "Materie")
+          st.success("Materia aggiunta con successo!")
+          st.rerun()
 
-    st.write("Materie attuali:")
-    for m in db["materie"]:
-      st.write(f"- {m}")
+    st.markdown("#### Elenco Materie Configurate:")
+    if not df_materie.empty:
+      st.dataframe(df_materie, use_container_width=True)
+    else:
+      st.info("Nessuna materia presente nel foglio Google Sheets.")
 
   with col_t2:
     st.markdown("### 🏫 Scuole di Provenienza")
-    nuova_scuola = st.text_input("Nome Scuola")
-    if st.button("Aggiungi Scuola"):
-      if nuova_scuola and nuova_scuola not in db["scuole_provenienza"]:
-        db["scuole_provenienza"].append(nuova_scuola)
-        salva_dati(db)
-        st.success("Scuola aggiunta!")
-        st.rerun()
+    with st.form("form_aggiungi_scuola"):
+      scuola_nom = st.text_input("Nome Scuola")
+      comune_nom = st.text_input("Comune")
+      prov_nom = st.text_input("Provincia")
+      tel_nom = st.text_input("Telefono")
+      tel2_nom = st.text_input("Telefono 2")
+      email_nom = st.text_input("Email")
+      if st.form_submit_button("Aggiungi Scuola"):
+        if scuola_nom:
+          nuova_scuola_row = {
+              "Scuola": scuola_nom,
+              "Comune": comune_nom,
+              "Provincia": prov_nom,
+              "Telefono": tel_nom,
+              "Telefono2": tel2_nom,
+              "Email": email_nom,
+          }
+          df_scuole = pd.concat(
+              [df_scuole, pd.DataFrame([nuova_scuola_row])], ignore_index=True
+          )
+          salva_tabella(df_scuole, "Scuole")
+          st.success("Scuola aggiunta con successo!")
+          st.rerun()
 
-    st.write("Scuole attuali:")
-    for s in db["scuole_provenienza"]:
-      st.write(f"- {s}")
+    st.markdown("#### Elenco Scuole Configurate:")
+    if not df_scuole.empty:
+      st.dataframe(df_scuole, use_container_width=True)
+    else:
+      st.info("Nessuna scuola presente nel foglio Google Sheets.")
