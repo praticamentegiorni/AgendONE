@@ -1794,12 +1794,12 @@ with tab4:
 with tab5:
     st.subheader("Registri di classe")
     try:
-        import RegistOne
-        if hasattr(RegistOne, "main"):
-            RegistOne.main()
+        import RegistrOne
+        if hasattr(RegistrOne, "main"):
+            RegistrOne.main()
         else:
-            st.info("La procedura RegistOne.py è stata importata con successo, ma non definisce una funzione main().")
+            st.info("La procedura RegistrOne.py è stata importata con successo, ma non definisce una funzione main().")
     except ImportError:
-        st.error("Impossibile trovare il file 'RegistOne.py'. Assicurati che si trovi nella stessa cartella di 'AgendOne.py'.")
+        st.error("Impossibile trovare il file 'RegistrOne.py'. Assicurati che si trovi nella stessa cartella di 'AgendOne.py'.")
     except Exception as e:
-        st.error(f"Errore durante l'esecuzione di RegistOne.py: {e}")
+        st.error(f"Errore durante l'esecuzione di RegistrOne.py: {e}")
