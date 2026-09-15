@@ -3,6 +3,7 @@ import json
 import os
 import pandas as pd
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 # Impostazione pagina
 st.set_page_config(page_title="RegistrOne - Registro di Classe", layout="wide")
@@ -56,8 +57,8 @@ st.markdown(
 # --- CONNESSIONE GOOGLE SHEETS (st-gsheets-connection) ---
 def get_gsheets_connection():
   try:
-    # Usiamo il tipo standard fornito da st-gsheets-connection ('gsheets')
-    return st.connection("gsheets", type="GSheetsConnection")
+    # Utilizzo esplicito della classe importata GSheetsConnection
+    return st.connection("gsheets", type=GSheetsConnection)
   except Exception as e:
     st.error(f"Errore di connessione a Google Sheets: {e}")
     return None
