@@ -8,7 +8,7 @@ import streamlit as st
 # Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
 
-# CSS PERSONALIZZATO E OTTIMIZZAZIONE RESPONSIVE PER SMARTPHONE
+# CSS PERSONALIZZATO PER IL MENU IN ALTO E LA VISTA CALENDARIO
 st.markdown(
     """
     <style>
@@ -19,7 +19,7 @@ st.markdown(
         background-color: #1e293b !important;
         color: #f8fafc !important;
         padding: 12px 24px !important;
-        border-radius: 8px !important;
+        border-radius: 8px !important; /* Arrotondati su tutti i lati per sembrare bottoni */
         margin-right: 10px !important;
         border: 1px solid #334155 !important;
         transition: all 0.2s ease-in-out !important;
@@ -171,55 +171,6 @@ st.markdown(
       color: #64748b;
       margin: 0;
     }
-
-    /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
-    div[data-testid="stDataEditor"] th div[title*="Orario"],
-    div[data-testid="stDataEditor"] th div[title*="Selezione"],
-    div[data-testid="stDataEditor"] th div[title*="Svolto"],
-    div[data-testid="stDataEditor"] th div[title*="Escludi"] {
-        white-space: pre-wrap !important;
-        font-size: 11px !important;
-        line-height: 1.1 !important;
-    }
-
-    /* ========================================================== */
-    /* OTTIMIZZAZIONI SPECIFICHE PER SMARTPHONE (Schermi stretti) */
-    /* ========================================================== */
-    @media screen and (max-width: 768px) {
-        .stColumns {
-            flex-direction: column !important;
-        }
-        div[data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 100% !important;
-            min-width: 100% !important;
-            margin-bottom: 8px !important;
-        }
-        
-        .block-container {
-            padding-left: 0.8rem !important;
-            padding-right: 0.8rem !important;
-            padding-top: 1rem !important;
-        }
-
-        button[data-baseweb="tab"] {
-            font-size: 14px !important;
-            padding: 8px 12px !important;
-            margin-right: 4px !important;
-        }
-
-        .cal-cell {
-            height: 75px !important;
-            padding: 3px !important;
-        }
-        .day-number {
-            font-size: 11px !important;
-        }
-        .badge-impegno, .badge-impegno-multi {
-            font-size: 9px !important;
-            padding: 1px 3px !important;
-        }
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -250,21 +201,17 @@ def parse_data_italiana(val):
         return pd.NaT
     val_str = str(val).strip()
     
-    # Se contiene trattini ed è in formato YYYY-MM-DD
     if "-" in val_str and len(val_str.split("-")[0]) == 4:
         try:
-            dt = pd.to_datetime(val_str, format="%Y-%m-%d", errors="coerce")
-            if pd.notnull(dt):
-                return dt
+            return pd.to_datetime(val_str, format="%Y-%m-%d")
         except:
             pass
             
-    # Formato DD/MM/YYYY
     try:
         parti = val_str.split("/")
         if len(parti) == 3:
             giorno, mese, anno = int(parti[0]), int(parti[1]), int(parti[2])
-            return pd.Timestamp(datetime.datetime(anno, mese, giorno))
+            return datetime.datetime(anno, mese, giorno)
     except:
         pass
         
@@ -396,14 +343,7 @@ def genera_pdf_report(df_report):
                 totale_ore_ente = 0.0
                 row_idx = 1
                 
-                for classe_nome in sorted(classi_dict.keys()):
-                    lista_attivita = sorted(
-                        classi_dict[classe_nome],
-                        key=lambda r: (
-                            parse_data_italiana(r.get("Data", "")) if pd.notnull(parse_data_italiana(r.get("Data", ""))) else pd.Timestamp.min,
-                            str(r.get("Orario Inizio", ""))
-                        )
-                    )
+                for classe_nome, lista_attivita in classi_dict.items():
                     totale_ore_classe = 0.0
                     
                     for row in lista_attivita:
@@ -767,6 +707,7 @@ opzioni_promemoria = {
 with tab1:
     st.subheader("Registrazione Nuova Attività")
     
+    # Flag per inserimento Normale o Multiplo
     tipo_inserimento = st.radio("Seleziona modalità di inserimento:", options=["Inserimento Normale", "Inserimento Multiplo"], horizontal=True)
 
     with st.form("form_orario", clear_on_submit=True):
@@ -823,16 +764,16 @@ with tab1:
         
         note = st.text_area("Note / Descrizione dettagliata", placeholder="Inserisci eventuali dettagli...")
         
+        # 8 righe condizionali per Inserimento Multiplo (orari ristretti e più spazio al testo)
         appunto_multiplo = ""
         if tipo_inserimento == "Inserimento Multiplo":
             st.markdown("---")
-            st.markdown("### Appuntamenti Multipli")
-            st.caption("Compila le righe desiderate inserendo l'intervallo di orario e selezionando una classe o inserendo un testo libero.")
+            st.markdown("### Sezione 8 Appuntamenti Multipli")
+            st.caption("Compila le righe desiderate inserendo l'intervallo di orario e il testo associato.")
             
             righe_multiplo_lista = []
-            opts_classi_multi = [""] + config.get("classi", [])
             for i in range(8):
-                rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
+                rc1, rc2, rc3, rc4, rc5 = st.columns([0.45, 0.45, 0.45, 0.45, 4.2])
                 with rc1:
                     m_ora_i = st.selectbox(f"DaO{i+1}", options=list(range(0, 24)), index=0, key=f"m_ora_i_{i}", label_visibility="collapsed")
                 with rc2:
@@ -841,15 +782,12 @@ with tab1:
                     m_ora_f = st.selectbox(f"AO{i+1}", options=list(range(0, 24)), index=1, key=f"m_ora_f_{i}", label_visibility="collapsed")
                 with rc4:
                     m_min_f = st.selectbox(f"AM{i+1}", options=list(range(0, 60)), index=0, key=f"m_min_f_{i}", label_visibility="collapsed")
-                with rc5_sel:
-                    m_classe_sel = st.selectbox(f"Classe{i+1}", options=opts_classi_multi, index=0, key=f"m_classe_sel_{i}", label_visibility="collapsed")
-                with rc5_txt:
-                    m_testo_libero = st.text_input(f"Testo{i+1}", placeholder=f"O testo libero {i+1}...", key=f"m_testo_libero_{i}", label_visibility="collapsed")
+                with rc5:
+                    m_testo = st.text_input(f"Testo {i+1}", placeholder=f"Testo appuntamento {i+1}...", key=f"m_testo_{i}", label_visibility="collapsed")
                 
-                val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
-                if val_testo_riga:
+                if m_testo.strip():
                     orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
-                    righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
+                    righe_multiplo_lista.append(f"{orario_slot_str} {m_testo.strip()}")
             
             appunto_multiplo = "\n".join(righe_multiplo_lista)
 
@@ -875,6 +813,7 @@ with tab1:
                     config["modalita"].append(nuovo_mod_libero)
                 salva_config(config)
 
+                # Generazione codice univoco composto da data (DDMMYYYY) + ora (HH:MM:SS)
                 now_ts = datetime.datetime.now()
                 codice_univoco_generato = data_selezionata.strftime("%d%m%Y") + now_ts.strftime("%H%M%S")
 
@@ -1027,12 +966,9 @@ with tab3:
         if filtro:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
-        df_mostra.insert(0, "Selezione", False)
+        df_mostra.insert(0, "Seleziona", False)
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
-
-        colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
-        df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
         def colora_righe_tabella(row):
             svolto = row.get("Svolto", False)
@@ -1045,19 +981,18 @@ with tab3:
                 return ['background-color: #155c32; color: #ffffff'] * len(row)
             return [''] * len(row)
 
-        df_styled = df_mostra_visibile.style.apply(colora_righe_tabella, axis=1)
+        df_styled = df_mostra.style.apply(colora_righe_tabella, axis=1)
 
         df_editato = st.data_editor(
             df_styled,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Selezione": st.column_config.CheckboxColumn("Sel.", required=True, width="small"),
-                "Svolto": st.column_config.CheckboxColumn("Svolto", required=True, width="small"),
-                "Escludi_Conteggio": st.column_config.CheckboxColumn("Escludi\nConteggio", required=True, width="small"),
-                "Orario Inizio": st.column_config.TextColumn("Orario\nInizio", width="small"),
-                "Orario Fine": st.column_config.TextColumn("Orario\nFine", width="small"),
-                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True, width="small"),
+                "Seleziona": st.column_config.CheckboxColumn(required=True),
+                "ID": st.column_config.NumberColumn(disabled=True),
+                "Svolto": st.column_config.CheckboxColumn(required=True),
+                "Escludi_Conteggio": st.column_config.CheckboxColumn(required=True),
+                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True),
             }
         )
 
@@ -1066,7 +1001,7 @@ with tab3:
 
         modificato = False
         for _, riga_ed in df_editato.iterrows():
-            idx_orig = int(riga_ed["ID"]) if "ID" in df_editato.columns else int(df_mostra[df_mostra.index == riga_ed.name]["ID"].values[0])
+            idx_orig = int(riga_ed["ID"])
             val_nuovo_svolto = bool(riga_ed["Svolto"])
             val_nuovo_escluso = bool(riga_ed["Escludi_Conteggio"])
             if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
@@ -1077,7 +1012,7 @@ with tab3:
             salva_dati(df)
             st.rerun()
 
-        righe_selezionate = df_mostra[df_editato["Selezione"] == True]["ID"].tolist() if "Selezione" in df_editato.columns and "ID" in df_mostra.columns else []
+        righe_selezionate = df_editato[df_editato["Seleziona"] == True]["ID"].tolist()
 
         col_act1, col_act2 = st.columns(2)
         with col_act1:
@@ -1168,6 +1103,7 @@ with tab3:
                 mod_orario_f_str = f"{mod_ora_f:02d}:{mod_min_f:02d}"
                 mod_ore_calc = calcola_ore(mod_orario_i_str, mod_orario_f_str)
 
+                # Gestione Enti
                 enti_esistenti = config.get("enti", []).copy()
                 val_ente_corrente = str(riga_corrente.get("Ente", "")).strip()
                 if val_ente_corrente and val_ente_corrente not in enti_esistenti:
@@ -1176,6 +1112,7 @@ with tab3:
                 mod_ente_sel = st.selectbox("Ente", options=enti_esistenti if enti_esistenti else [""], index=idx_ente if enti_esistenti else 0, key="mod_sel_ente")
                 mod_ente_libero = st.text_input("O digita nuovo ente (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_ente")
 
+                # Gestione Classi
                 classi_esistenti = config.get("classi", []).copy()
                 val_classe_corrente = str(riga_corrente.get("Classe", "")).strip()
                 if val_classe_corrente and val_classe_corrente not in classi_esistenti:
@@ -1184,6 +1121,7 @@ with tab3:
                 mod_classe_sel = st.selectbox("Classe", options=classi_esistenti if classi_esistenti else [""], index=idx_classe if classi_esistenti else 0, key="mod_sel_classe")
                 mod_classe_libera = st.text_input("O digita nuova classe (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_classe")
 
+                # Gestione Sedi
                 sedi_esistenti = config.get("sedi", []).copy()
                 val_sede_corrente = str(riga_corrente.get("Sede", "")).strip()
                 if val_sede_corrente and val_sede_corrente not in sedi_esistenti:
@@ -1192,6 +1130,7 @@ with tab3:
                 mod_sede_sel = st.selectbox("Sede", options=sedi_esistenti if sedi_esistenti else [""], index=idx_sede if sedi_esistenti else 0, key="mod_sel_sede")
                 mod_sede_libera = st.text_input("O digita nuova sede (Modifica):", placeholder="Se non è in elenco...", key="mod_lib_sede")
 
+                # Gestione Modalità
                 modalita_esistenti = config.get("modalita", []).copy()
                 val_mod_corrente = str(riga_corrente.get("Modalità", "")).strip()
                 if val_mod_corrente and val_mod_corrente not in modalita_esistenti:
@@ -1214,70 +1153,9 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
                 
+                # Modifica del testo inserito per il multi-impegno
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
-                is_multiplo = bool(attuale_appunto_multiplo.strip())
-
-                if is_multiplo:
-                    st.markdown("---")
-                    st.markdown("### Appuntamenti Multipli (Modifica)")
-                    st.caption("Modifica le righe dell'appuntamento multiplo.")
-                    
-                    parsed_righe = []
-                    for line in attuale_appunto_multiplo.split("\n"):
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            parts = line.split(" ", 1)
-                            time_range = parts[0]
-                            text = parts[1] if len(parts) > 1 else ""
-                            t_parts = time_range.split("-")
-                            start_t = t_parts[0]
-                            end_t = t_parts[1]
-                            hi, mi = map(int, start_t.split(":"))
-                            hf, mf = map(int, end_t.split(":"))
-                            parsed_righe.append((hi, mi, hf, mf, text))
-                        except Exception:
-                            parsed_righe.append((9, 0, 10, 0, line))
-
-                    mod_righe_multiplo_lista = []
-                    opts_classi_multi = [""] + config.get("classi", [])
-                    for i in range(8):
-                        default_hi, default_mi, default_hf, default_mf, default_text = (9, 0, 10, 0, "")
-                        if i < len(parsed_righe):
-                            default_hi, default_mi, default_hf, default_mf, default_text = parsed_righe[i]
-
-                        def_class_val = ""
-                        def_text_val = ""
-                        if default_text in config.get("classi", []):
-                            def_class_val = default_text
-                        else:
-                            def_text_val = default_text
-
-                        idx_cls = opts_classi_multi.index(def_class_val) if def_class_val in opts_classi_multi else 0
-
-                        rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
-                        with rc1:
-                            m_ora_i = st.selectbox(f"ModDaO{i+1}", options=list(range(0, 24)), index=default_hi if default_hi in range(0, 24) else 0, key=f"mod_m_ora_i_{i}", label_visibility="collapsed")
-                        with rc2:
-                            m_min_i = st.selectbox(f"ModDaM{i+1}", options=list(range(0, 60)), index=default_mi if default_mi in range(0, 60) else 0, key=f"mod_m_min_i_{i}", label_visibility="collapsed")
-                        with rc3:
-                            m_ora_f = st.selectbox(f"ModAO{i+1}", options=list(range(0, 24)), index=default_hf if default_hf in range(0, 24) else 1, key=f"mod_m_ora_f_{i}", label_visibility="collapsed")
-                        with rc4:
-                            m_min_f = st.selectbox(f"ModAM{i+1}", options=list(range(0, 60)), index=default_mf if default_mf in range(0, 60) else 0, key=f"mod_m_min_f_{i}", label_visibility="collapsed")
-                        with rc5_sel:
-                            m_classe_sel = st.selectbox(f"ModClasse{i+1}", options=opts_classi_multi, index=idx_cls, key=f"mod_m_classe_sel_{i}", label_visibility="collapsed")
-                        with rc5_txt:
-                            m_testo_libero = st.text_input(f"ModTesto{i+1}", value=def_text_val, placeholder=f"O testo libero {i+1}...", key=f"mod_m_testo_libero_{i}", label_visibility="collapsed")
-                        
-                        val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
-                        if val_testo_riga:
-                            orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
-                            mod_righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
-                    
-                    mod_appunto_multiplo = "\n".join(mod_righe_multiplo_lista)
-                else:
-                    mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+                mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
                     if mod_orario_i_str >= mod_orario_f_str:
@@ -1587,7 +1465,6 @@ with tab4:
 
     df_cal = df.copy()
     if not df_cal.empty:
-        # Conversione e filtraggio sicuri basati su oggetti datetime reali
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
         
@@ -1601,7 +1478,7 @@ with tab4:
 
     num_appuntamenti_mensili = len(df_mese)
     df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
-    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_mese.empty else 0.0
+    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_ore_valide.empty else 0.0
 
     st.markdown(
         f"""
