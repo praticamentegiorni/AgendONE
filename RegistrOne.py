@@ -5,12 +5,63 @@ from streamlit_gsheets import GSheetsConnection
 
 
 def main():
-  # Connessione a Google Sheets dedicata a RegistrOne_DB
+  # Impostazione pagina (se richiamato da modulo principale, gestito in sicurezza)
+  try:
+    st.set_page_config(page_title="RegistrOne - Registro di Classe", layout="wide")
+  except Exception:
+    pass
+
+  # CSS PERSONALIZZATO IDENTICO AD AGENDONE PER MANTENERE COERENZA GRAFICA
+  st.markdown(
+      """
+      <style>
+      /* Ingrandimento e messa in evidenza dei Tab del Menu Principale a forma di Pulsante */
+      button[data-baseweb="tab"] {
+          font-size: 18px !important;
+          font-weight: bold !important;
+          background-color: #1e293b !important;
+          color: #f8fafc !important;
+          padding: 12px 24px !important;
+          border-radius: 8px !important;
+          margin-right: 10px !important;
+          border: 1px solid #334155 !important;
+          transition: all 0.2s ease-in-out !important;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+      }
+
+      button[data-baseweb="tab"]:hover {
+          background-color: #334155 !important;
+          color: #ffffff !important;
+          box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+          transform: translateY(-2px) !important;
+      }
+
+      /* Tab attivo evidenziato */
+      button[data-baseweb="tab"][aria-selected="true"] {
+          background-color: #2563eb !important;
+          color: #ffffff !important;
+          border-color: #3b82f6 !important;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4) !important;
+      }
+
+      .stCard {
+          background-color: #ffffff;
+          padding: 20px;
+          border-radius: 10px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+          margin-bottom: 15px;
+      }
+      </style>
+      """,
+      unsafe_allow_html=True,
+  )
+
+  # Connessione a Google Sheets dedicata a RegistrOne
   try:
     conn = st.connection("gsheets_registrone", type=GSheetsConnection)
   except Exception as e:
     st.error(
-        "Errore nella configurazione della connessione Google Sheets nel file"
+        "Errore nella configurazione della connessione Google Sheets nei"
         f" secrets: {e}"
     )
     st.stop()
@@ -21,7 +72,7 @@ def main():
       df = conn.read(worksheet=worksheet_name, ttl=0)
       df = df.dropna(how="all")
       return df
-    except Exception as e:
+    except Exception:
       return pd.DataFrame()
 
   def salva_tabella(df, worksheet_name):
@@ -41,7 +92,7 @@ def main():
   df_materie = carica_tabella("Materie")
   df_scuole = carica_tabella("Scuole")
 
-  # Liste di supporto estratte dai DataFrame
+  # Liste di supporto estratte dai DataFrame (con fallback di default se vuote)
   lista_classi = (
       df_classi["nome_classe"].dropna().astype(str).tolist()
       if not df_classi.empty and "nome_classe" in df_classi.columns
@@ -50,19 +101,23 @@ def main():
   lista_materie = (
       df_materie["Materia"].dropna().astype(str).tolist()
       if not df_materie.empty and "Materia" in df_materie.columns
-      else []
+      else ["Informatica", "Laboratorio", "Sistemi e Reti"]
   )
   lista_scuole = (
       df_scuole["Scuola"].dropna().astype(str).tolist()
       if not df_scuole.empty and "Scuola" in df_scuole.columns
-      else []
+      else [
+          "Scuola Media Statale",
+          "Altro Istituto Professionale",
+          "Liceo Scientifico",
+      ]
   )
 
   # --- INTESTAZIONE PRINCIPALE ---
   st.title("📚 RegistrOne - Registro di Classe Professionale")
   st.markdown("---")
 
-  # MENU PRINCIPALE A TAB
+  # MENU PRINCIPALE A TAB (Stile AgendOne)
   tabs = st.tabs([
       "🏫 Gestione Classi",
       "👨‍🎓 Anagrafica Alunni",
@@ -105,6 +160,7 @@ def main():
         else:
           st.error("Inserisci un nome valido o già esistente.")
 
+    # Sezione di Modifica ed Eliminazione Classi esistenti
     if lista_classi:
       st.markdown("---")
       st.markdown("### Modifica o Elimina Classe Esistente")
@@ -227,7 +283,11 @@ def main():
 
           submitted = st.form_submit_button("Salva Alunno")
           if submitted and nome and cognome:
-            nuovo_id = str(len(df_alunni) + 1) + "_" + str(int(datetime.datetime.now().timestamp()))
+            nuovo_id = (
+                str(len(df_alunni) + 1)
+                + "_"
+                + str(int(datetime.datetime.now().timestamp()))
+            )
             nuovo_alunno_dict = {
                 "id": nuovo_id,
                 "nome": nome,
@@ -612,68 +672,44 @@ def main():
   # 5. TABELLE & CONFIGURAZIONE
   # ==========================================
   with tabs[4]:
-    st.subheader("Gestione Tabelle di Configurazione (Google Sheets)")
+    st.subheader("Gestione Tabelle di Configurazione")
 
     col_t1, col_t2 = st.columns(2)
 
     with col_t1:
-      st.markdown("### 📚 Materie (Docenti e Co-docenti)")
-      with st.form("form_aggiungi_materia"):
-        materia_nom = st.text_input("Nome Materia")
-        docente_nom = st.text_input("Docente")
-        codocente_nom = st.text_input("Co-Docente (opzionale)")
-        if st.form_submit_button("Aggiungi Materia"):
-          if materia_nom:
-            nuova_materia_row = {
-                "Materia": materia_nom,
-                "Docente": docente_nom,
-                "CoDocente": codocente_nom,
-            }
-            df_materie = pd.concat(
-                [df_materie, pd.DataFrame([nuova_materia_row])],
-                ignore_index=True,
-            )
-            salva_tabella(df_materie, "Materie")
-            st.success("Materia aggiunta con successo!")
-            st.rerun()
+      st.markdown("### 📚 Gestione Materie")
+      nuova_materia = st.text_input("Nome Materia")
+      if st.button("Aggiungi Materia"):
+        if nuova_materia and nuova_materia not in lista_materie:
+          nuova_materia_row = {"Materia": nuova_materia}
+          df_materie = pd.concat(
+              [df_materie, pd.DataFrame([nuova_materia_row])],
+              ignore_index=True,
+          )
+          salva_tabella(df_materie, "Materie")
+          st.success("Materia aggiunta!")
+          st.rerun()
 
-      st.markdown("#### Elenco Materie Configurate:")
-      if not df_materie.empty:
-        st.dataframe(df_materie, use_container_width=True)
-      else:
-        st.info("Nessuna materia presente nel foglio Google Sheets.")
+      st.write("Materie attuali:")
+      for m in lista_materie:
+        st.write(f"- {m}")
 
     with col_t2:
       st.markdown("### 🏫 Scuole di Provenienza")
-      with st.form("form_aggiungi_scuola"):
-        scuola_nom = st.text_input("Nome Scuola")
-        comune_nom = st.text_input("Comune")
-        prov_nom = st.text_input("Provincia")
-        tel_nom = st.text_input("Telefono")
-        tel2_nom = st.text_input("Telefono 2")
-        email_nom = st.text_input("Email")
-        if st.form_submit_button("Aggiungi Scuola"):
-          if scuola_nom:
-            nuova_scuola_row = {
-                "Scuola": scuola_nom,
-                "Comune": comune_nom,
-                "Provincia": prov_nom,
-                "Telefono": tel_nom,
-                "Telefono2": tel2_nom,
-                "Email": email_nom,
-            }
-            df_scuole = pd.concat(
-                [df_scuole, pd.DataFrame([nuova_scuola_row])], ignore_index=True
-            )
-            salva_tabella(df_scuole, "Scuole")
-            st.success("Scuola aggiunta con successo!")
-            st.rerun()
+      nuova_scuola = st.text_input("Nome Scuola")
+      if st.button("Aggiungi Scuola"):
+        if nuova_scuola and nuova_scuola not in lista_scuole:
+          nuova_scuola_row = {"Scuola": nuova_scuola}
+          df_scuole = pd.concat(
+              [df_scuole, pd.DataFrame([nuova_scuola_row])], ignore_index=True
+          )
+          salva_tabella(df_scuole, "Scuole")
+          st.success("Scuola aggiunta!")
+          st.rerun()
 
-      st.markdown("#### Elenco Scuole Configurate:")
-      if not df_scuole.empty:
-        st.dataframe(df_scuole, use_container_width=True)
-      else:
-        st.info("Nessuna scuola presente nel foglio Google Sheets.")
+      st.write("Scuole attuali:")
+      for s in lista_scuole:
+        st.write(f"- {s}")
 
 
 if __name__ == "__main__":
