@@ -53,10 +53,11 @@ st.markdown(
 )
 
 
-# --- CONNESSIONE GOOGLE SHEETS CON CACHE ---
+# --- CONNESSIONE GOOGLE SHEETS (st-gsheets-connection) ---
 def get_gsheets_connection():
   try:
-    return st.connection("gsheets_registrone", type="GSheetsConnection")
+    # Usiamo il tipo standard fornito da st-gsheets-connection ('gsheets')
+    return st.connection("gsheets", type="GSheetsConnection")
   except Exception as e:
     st.error(f"Errore di connessione a Google Sheets: {e}")
     return None
@@ -111,7 +112,6 @@ def carica_dati_gsheets():
         "note": note_df.to_dict(orient="records") if not note_df.empty else [],
     }
   except Exception as e:
-    # Fallback o struttura iniziale se i fogli sono vuoti
     return {
         "classi": [],
         "materie": ["Informatica", "Laboratorio", "Sistemi e Reti"],
@@ -134,7 +134,6 @@ def salva_dati(data):
     return
 
   try:
-    # Scrittura atomica sui rispettivi fogli Google Sheets
     conn.update(
         worksheet="Classi", data=pd.DataFrame({"Classe": data["classi"]})
     )
@@ -192,7 +191,6 @@ def salva_dati(data):
         ),
     )
 
-    # Pulisce la cache per ricaricare i dati aggiornati
     st.cache_data.clear()
   except Exception as e:
     st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
@@ -245,7 +243,6 @@ with tabs[0]:
       else:
         st.error("Inserisci un nome valido o già esistente.")
 
-  # Sezione di Modifica ed Eliminazione Classi esistenti
   if db["classi"]:
     st.markdown("---")
     st.markdown("### Modifica o Elimina Classe Esistente")
@@ -368,7 +365,9 @@ with tabs[1]:
               "scuola_prec": scuola_prec if altra_scuola else "",
               "parla_italiano": parla_italiano,
               "provenienza_orig": provenienza_orig,
-              "famiglia_comunita": famiglia_comunita,
+              "famiglia_comunita": familia_comunita
+              if "famiglia_comunita" in locals()
+              else famiglia_comunita,
               "problemi_apprendimento": problemi_apprendimento,
               "dettagli_apprendimento": dettagli_app
               if problemi_apprendimento
