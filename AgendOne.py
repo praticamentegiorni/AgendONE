@@ -6,7 +6,6 @@ import json
 import os
 import pandas as pd
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 
 # Impostazione pagina (deve rimanere unica all'inizio dell'app)
 st.set_page_config(page_title="AgendOne", layout="wide")
@@ -349,8 +348,23 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         worksheet = spreadsheet.worksheet(nome_foglio)
         return worksheet
     except Exception as e:
-        st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
+
+# Lettore generico e sicuro di fogli da Google Sheets in DataFrame Pandas
+def leggi_foglio_df(nome_foglio):
+    try:
+        ws = get_gspread_client_and_sheet(nome_foglio)
+        if ws is None:
+            return pd.DataFrame()
+        records = ws.get_all_records()
+        if not records:
+            vals = ws.get_all_values()
+            if len(vals) > 1:
+                return pd.DataFrame(vals[1:], columns=vals[0])
+            return pd.DataFrame()
+        return pd.DataFrame(records)
+    except Exception:
+        return pd.DataFrame()
 
 # Funzione per sincronizzare l'evento su Google Calendar
 def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
@@ -553,52 +567,48 @@ def salva_dati(df_to_save):
     except Exception as e:
         st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
-# ================= FUNZIONE REGISTRI DI CLASSE (INTEGRAZIONE CON REGISTRONE_DB) =================
+# ================= FUNZIONE REGISTRI DI CLASSE (INTEGRAZIONE REGISTRONE_DB) =================
 def mostra_registri_di_classe():
-    def get_gsheets_connection():
-        try:
-            return st.connection("gsheets", type=GSheetsConnection)
-        except Exception as e:
-            st.error(f"Errore di connessione a Google Sheets: {e}")
-            return None
-
     @st.cache_data(ttl=60)
-    def carica_dati_gsheets():
-        conn = get_gsheets_connection()
-        if not conn:
-            return None
-        try:
-            classi_df = conn.read(worksheet="Classi", ttl=0)
-            materie_df = conn.read(worksheet="Materie", ttl=0)
-            scuole_df = conn.read(worksheet="Scuole", ttl=0)
-            alunni_df = conn.read(worksheet="Alunni", ttl=0)
-            presenze_df = conn.read(worksheet="Presenze", ttl=0)
-            voti_df = conn.read(worksheet="Voti", ttl=0)
-            note_df = conn.read(worksheet="Note", ttl=0)
+    def carica_dati_registrone():
+        classi_df = leggi_foglio_df("Classi")
+        materie_df = leggi_foglio_df("Materie")
+        scuole_df = leggi_foglio_df("Scuole")
+        alunni_df = leggi_foglio_df("Alunni")
+        presenze_df = leggi_foglio_df("Presenze")
+        voti_df = leggi_foglio_df("Voti")
+        note_df = leggi_foglio_df("Note")
 
-            # Fallback colonne flessibili
-            col_classe = "Classe" if "Classe" in classi_df.columns else classi_df.columns[0]
-            col_materia = "Materia" if "Materia" in materie_df.columns else materie_df.columns[0]
-            col_scuola = "Scuola" if "Scuola" in scuole_df.columns else ("Scuole" if "Scuole" in scuole_df.columns else scuole_df.columns[0])
+        def estrai_colonna(df, nomi_possibili):
+            for col in nomi_possibili:
+                if col in df.columns:
+                    return df[col].dropna().astype(str).tolist()
+            if not df.empty and len(df.columns) > 0:
+                return df.iloc[:, 0].dropna().astype(str).tolist()
+            return []
 
-            return {
-                "classi": classi_df[col_classe].dropna().astype(str).tolist() if not classi_df.empty else [],
-                "materie": materie_df[col_materia].dropna().astype(str).tolist() if not materie_df.empty else ["Informatica", "Laboratorio", "Sistemi e Reti"],
-                "scuole_provenienza": scuole_df[col_scuola].dropna().astype(str).tolist() if not scuole_df.empty else [],
-                "alunni": alunni_df,
-                "presenze": presenze_df,
-                "voti": voti_df,
-                "note": note_df,
-            }
-        except Exception as e:
-            st.error(f"Errore durante la lettura del database RegistrOne: {e}")
-            return None
+        lista_classi = estrai_colonna(classi_df, ["Classe", "Classi", "Nome_Classe"])
+        lista_materie = estrai_colonna(materie_df, ["Materia", "Materie", "Nome_Materia"])
+        lista_scuole = estrai_colonna(scuole_df, ["Scuola", "Scuole", "Nome_Scuola"])
 
-    dati = carica_dati_gsheets()
+        if not lista_materie:
+            lista_materie = ["Informatica", "Laboratorio", "Sistemi e Reti"]
+
+        return {
+            "classi": lista_classi,
+            "materie": lista_materie,
+            "scuole_provenienza": lista_scuole,
+            "alunni": alunni_df,
+            "presenze": presenze_df,
+            "voti": voti_df,
+            "note": note_df,
+        }
+
+    dati = carica_dati_registrone()
 
     if dati:
         st.title("RegistrOne - Registro di Classe")
-        st.success("Dati caricati con successo dal Database!")
+        st.success("Dati del Registro caricati con successo!")
 
         col_reg1, col_reg2, col_reg3 = st.columns(3)
         with col_reg1:
@@ -606,7 +616,7 @@ def mostra_registri_di_classe():
         with col_reg2:
             st.metric("Materie", len(dati["materie"]))
         with col_reg3:
-            st.metric("Totale Alunni", len(dati["alunni"]) if dati["alunni"] is not None else 0)
+            st.metric("Totale Alunni", len(dati["alunni"]) if dati["alunni"] is not None and not dati["alunni"].empty else 0)
 
         st.markdown("---")
         c_sel1, c_sel2 = st.columns(2)
@@ -623,6 +633,8 @@ def mostra_registri_di_classe():
                 if classe_scelta != "Tutte" and "Classe" in df_alunni.columns:
                     df_alunni = df_alunni[df_alunni["Classe"].astype(str) == classe_scelta]
                 st.dataframe(df_alunni, use_container_width=True)
+            else:
+                st.info("Nessun alunno presente nel database.")
 
         with sub_tab2:
             if dati["presenze"] is not None and not dati["presenze"].empty:
@@ -937,7 +949,7 @@ with tab3:
             if pdf_data:
                 st.download_button("Scarica Report PDF", data=pdf_data, file_name="report_attivita.pdf", mime="application/pdf", use_container_width=True)
 
-# ================= TAB 4: CALENDARIO (CORRETTO E COMPLETO) =================
+# ================= TAB 4: CALENDARIO (CORRETTO) =================
 with tab4:
     st.subheader("Vista Calendario Mensile")
 
@@ -1044,12 +1056,12 @@ with tab4:
                     for imp in impegni_per_giorno[giorno]:
                         st_style = "text-decoration: line-through; opacity: 0.6;" if imp["svolto"] else ""
                         html_cal += f"<div class='badge-impegno' style='{st_style}'><b>{imp['classe']}</b><br>{imp['orario']}</div>"
-                html_cal += "td>"
+                html_cal += "</td>"
         html_cal += "</tr>"
-    html_cal += "tbody>table>"
+    html_cal += "</tbody></table>"
 
     st.markdown(html_cal, unsafe_allow_html=True)
 
-# ================= TAB 5: REGISTRI DI CLASSE (RICHIAMO ESECUZIONE) =================
+# ================= TAB 5: REGISTRI DI CLASSE =================
 with tab5:
     mostra_registri_di_classe()
