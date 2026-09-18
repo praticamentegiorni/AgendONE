@@ -2,6 +2,7 @@ import datetime
 import io
 import json
 import os
+import re
 import pandas as pd
 import streamlit as st
 
@@ -318,7 +319,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
-        td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=9, fontName='Helvetica', textColor=colors.HexColor('#333333'))
+        td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
         style_subtot_val_classe = ParagraphStyle('SubTotValClasse', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
@@ -383,6 +384,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                     df_sorted["Data_dt"] = df_sorted["Data"].apply(parse_data_italiana)
                 df_sorted = df_sorted.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
                 
+                time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
                 row_idx = 1
                 for _, row in df_sorted.iterrows():
                     parsed_dt = parse_data_italiana(row.get("Data", ""))
@@ -409,6 +411,62 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                         Paragraph(ore_str, cur_td_style)
                     ])
                     row_idx += 1
+
+                    # Estrazione e inserimento sotto-appuntamenti da Appunto_Multiplo
+                    appunto_mult = str(row.get("Appunto_Multiplo", ""))
+                    if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
+                        sub_items = []
+                        lines = [l.strip() for l in appunto_mult.split("\n") if l.strip()]
+                        for line in lines:
+                            match = time_pattern.match(line)
+                            if match:
+                                start_t = match.group(1)
+                                end_t = match.group(2)
+                                course_name = match.group(3).strip()
+                                
+                                if len(start_t) == 4:
+                                    start_t = "0" + start_t
+                                if len(end_t) == 4:
+                                    end_t = "0" + end_t
+
+                                sub_ore = calcola_ore(start_t, end_t)
+                                orario_sub_str = f"{start_t} - {end_t}"
+                                sub_items.append({
+                                    "start_t": start_t,
+                                    "end_t": end_t,
+                                    "orario": orario_sub_str,
+                                    "course": course_name,
+                                    "ore": sub_ore
+                                })
+                            else:
+                                sub_items.append({
+                                    "start_t": "00:00",
+                                    "end_t": "00:00",
+                                    "orario": "",
+                                    "course": line,
+                                    "ore": 0.0
+                                })
+
+                        sub_items = sorted(sub_items, key=lambda x: x["start_t"])
+
+                        for sub in sub_items:
+                            if not is_esclusa:
+                                sub_ore_str = f"{sub['ore']:.2f}h" if sub['ore'] > 0 else ""
+                                cur_sub_style = td_style
+                            else:
+                                sub_ore_str = "0.00h"
+                                cur_sub_style = td_excl_style
+
+                            det_data.append([
+                                Paragraph("", cur_sub_style),
+                                Paragraph(sub["orario"], cur_sub_style),
+                                Paragraph("", cur_sub_style),
+                                Paragraph(sub["course"], cur_sub_style),
+                                Paragraph("", cur_sub_style),
+                                Paragraph("", cur_sub_style),
+                                Paragraph(sub_ore_str, cur_sub_style)
+                            ])
+                            row_idx += 1
                 
                 t_det = Table(det_data, colWidths=col_widths)
                 t_det.setStyle(TableStyle(table_styles))
