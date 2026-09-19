@@ -271,6 +271,19 @@ def parse_data_italiana(val):
         
     return pd.to_datetime(val_str, errors="coerce", dayfirst=True)
 
+# Normalizza stringa orario in formato HH:MM (es. "8:00" -> "08:00") per un corretto ordinamento
+def normalize_time_str(t_str):
+    t_str = str(t_str).strip()
+    if not t_str or t_str.lower() in ["nan", "none"]:
+        return "00:00"
+    try:
+        parts = t_str.split(":")
+        if len(parts) >= 2:
+            return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+    except:
+        pass
+    return t_str
+
 # Calcolo automatico delle ore tra inizio e fine
 def calcola_ore(ora_inizio, ora_fine):
     try:
@@ -382,7 +395,16 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                 df_sorted = df_report.copy()
                 if "Data_dt" not in df_sorted.columns:
                     df_sorted["Data_dt"] = df_sorted["Data"].apply(parse_data_italiana)
-                df_sorted = df_sorted.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
+                
+                # Normalizzazione colonne per ordinamento in ordine: Data -> Orario Inizio -> Ente -> Classe
+                df_sorted["Orario_Inizio_norm"] = df_sorted["Orario Inizio"].apply(normalize_time_str)
+                df_sorted["Ente_norm"] = df_sorted["Ente"].fillna("").astype(str)
+                df_sorted["Classe_norm"] = df_sorted["Classe"].fillna("").astype(str)
+
+                df_sorted = df_sorted.sort_values(
+                    by=["Data_dt", "Orario_Inizio_norm", "Ente_norm", "Classe_norm"], 
+                    ascending=[True, True, True, True]
+                )
                 
                 time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
                 row_idx = 1
@@ -424,10 +446,8 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 end_t = match.group(2)
                                 course_name = match.group(3).strip()
                                 
-                                if len(start_t) == 4:
-                                    start_t = "0" + start_t
-                                if len(end_t) == 4:
-                                    end_t = "0" + end_t
+                                start_t = normalize_time_str(start_t)
+                                end_t = normalize_time_str(end_t)
 
                                 sub_ore = calcola_ore(start_t, end_t)
                                 orario_sub_str = f"{start_t} - {end_t}"
@@ -522,7 +542,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                             classi_dict[classe_nome],
                             key=lambda r: (
                                 parse_data_italiana(r.get("Data", "")) if pd.notnull(parse_data_italiana(r.get("Data", ""))) else pd.Timestamp.min,
-                                str(r.get("Orario Inizio", ""))
+                                normalize_time_str(r.get("Orario Inizio", ""))
                             )
                         )
                         totale_ore_classe = 0.0
@@ -1138,7 +1158,8 @@ with tab3:
             df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
             df_vis["Ore"] = df_vis.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
-            df_vis = df_vis.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[True, True])
+            df_vis["Orario_Inizio_norm"] = df_vis["Orario Inizio"].apply(normalize_time_str)
+            df_vis = df_vis.sort_values(by=["Data_dt", "Orario_Inizio_norm"], ascending=[True, True]).drop(columns=["Orario_Inizio_norm"])
             
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
             df_vis = df_vis[cols + ["ID_originale"]]
@@ -1529,7 +1550,8 @@ with tab3:
         colonna_ordinamento = campi_ordinamento[scelta_ordinamento]
         if colonna_ordinamento in df_report.columns:
             if colonna_ordinamento == "Data_dt":
-                df_report = df_report.sort_values(by=["Data_dt", "Orario Inizio"], ascending=[crescente, True])
+                df_report["Orario_Inizio_norm"] = df_report["Orario Inizio"].apply(normalize_time_str)
+                df_report = df_report.sort_values(by=["Data_dt", "Orario_Inizio_norm"], ascending=[crescente, True]).drop(columns=["Orario_Inizio_norm"])
             else:
                 df_report = df_report.sort_values(by=[colonna_ordinamento, "Data_dt"], ascending=[crescente, True])
 
@@ -1886,9 +1908,6 @@ with tab4:
         transform: translateX(-50%);
         opacity: 0;
         transition: opacity 0.3s;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-        font-size: 12px;
-        line-height: 1.4;
       }}
       .tooltip-container:hover .tooltip-content {{
         visibility: visible;
@@ -1896,9 +1915,12 @@ with tab4:
       }}
     </style>
     <table class="cal-table">
-      <tr>{th_html}</tr>
-      {html_righe}
+      <thead>
+        <tr>{th_html}</tr>
+      </thead>
+      <tbody>
+        {html_righe}
+      </tbody>
     </table>
     """
-
     st.markdown(html_cal, unsafe_allow_html=True)
