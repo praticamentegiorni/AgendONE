@@ -183,6 +183,13 @@ st.markdown(
         line-height: 1.1 !important;
     }
 
+    /* Sfondo chiaro per le caselle spuntabili nel Data Editor per garantirne la visibilità */
+    div[data-testid="stDataEditor"] td[data-th="Selezione"],
+    div[data-testid="stDataEditor"] td[data-th="Svolto"],
+    div[data-testid="stDataEditor"] td[data-th="Escludi_Conteggio"] {
+        background-color: #ffffff !important;
+    }
+
     /* ========================================================== */
     /* OTTIMIZZAZIONI SPECIFICHE PER SMARTPHONE (Schermi stretti) */
     /* ========================================================== */
@@ -1176,8 +1183,28 @@ with tab3:
         colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
         df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
+        def colora_righe_tabella(row):
+            svolto = row.get("Svolto", False)
+            if svolto:
+                base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'
+            else:
+                mod = str(row.get("Modalità", "")).lower()
+                if "presenza" in mod:
+                    base_style = 'background-color: #1c3d73; color: #ffffff'
+                elif "video" in mod:
+                    base_style = 'background-color: #155c32; color: #ffffff'
+                else:
+                    base_style = ''
+            
+            return [
+                'background-color: #ffffff; color: #000000;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
+                for col in row.index
+            ]
+
+        df_styled = df_mostra_visibile.style.apply(colora_righe_tabella, axis=1)
+
         df_editato = st.data_editor(
-            df_mostra_visibile,
+            df_styled,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -1853,56 +1880,53 @@ with tab4:
         margin-bottom: 4px;
       }}
       .badge-impegno {{
-        background-color: #2fa866;
-        color: white;
-        font-size: 11px;
-        padding: 2px 4px;
+        background-color: #2563eb;
+        color: #ffffff;
+        padding: 2px 6px;
         border-radius: 4px;
+        font-size: 11px;
         display: block;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        margin-bottom: 2px;
       }}
       .badge-impegno-multi {{
-        background-color: #2563eb;
-        color: white;
-        font-size: 11px;
-        padding: 2px 4px;
+        background-color: #d97706;
+        color: #ffffff;
+        padding: 2px 6px;
         border-radius: 4px;
+        font-size: 11px;
         display: block;
         font-weight: bold;
-        text-align: center;
+        margin-bottom: 2px;
       }}
       .tooltip-container {{
         position: relative;
         display: inline-block;
         width: 100%;
-        cursor: pointer;
       }}
       .tooltip-content {{
-        visibility: hidden;
-        width: 260px;
-        background-color: #222222;
-        color: #fff;
-        text-align: left;
-        border-radius: 6px;
-        padding: 10px;
+        display: none;
         position: absolute;
         z-index: 100;
-        bottom: 125%;
-        left: 50%;
-        margin-left: -130px;
-        opacity: 0;
-        transition: opacity 0.2s;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-        border: 1px solid #555;
+        background-color: #1e293b;
+        color: #ffffff;
+        padding: 12px;
+        border-radius: 8px;
+        width: 280px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        border: 1px solid #475569;
+        top: 100%;
+        left: 0;
         font-size: 12px;
+        line-height: 1.4;
       }}
       .tooltip-container:hover .tooltip-content {{
-        visibility: visible;
-        opacity: 1;
+        display: block;
       }}
     </style>
+
     <table class="cal-table">
       <thead>
         <tr>{th_html}</tr>
