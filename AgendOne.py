@@ -1176,21 +1176,8 @@ with tab3:
         colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
         df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
-        def colora_righe_tabella(row):
-            svolto = row.get("Svolto", False)
-            if svolto:
-                return ['background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'] * len(row)
-            mod = str(row.get("Modalità", "")).lower()
-            if "presenza" in mod:
-                return ['background-color: #1c3d73; color: #ffffff'] * len(row)
-            elif "video" in mod:
-                return ['background-color: #155c32; color: #ffffff'] * len(row)
-            return [''] * len(row)
-
-        df_styled = df_mostra_visibile.style.apply(colora_righe_tabella, axis=1)
-
         df_editato = st.data_editor(
-            df_styled,
+            df_mostra_visibile,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -1869,45 +1856,47 @@ with tab4:
         background-color: #2fa866;
         color: white;
         font-size: 11px;
-        padding: 2px 6px;
+        padding: 2px 4px;
         border-radius: 4px;
         display: block;
-        margin-bottom: 2px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }}
       .badge-impegno-multi {{
-        background-color: #c0392b;
+        background-color: #2563eb;
         color: white;
         font-size: 11px;
-        padding: 2px 6px;
+        padding: 2px 4px;
         border-radius: 4px;
         display: block;
-        margin-bottom: 2px;
-        text-align: center;
         font-weight: bold;
+        text-align: center;
       }}
       .tooltip-container {{
         position: relative;
-        display: block;
+        display: inline-block;
+        width: 100%;
         cursor: pointer;
       }}
       .tooltip-content {{
         visibility: hidden;
         width: 260px;
-        background-color: #2c3e50;
+        background-color: #222222;
         color: #fff;
         text-align: left;
         border-radius: 6px;
-        padding: 8px 10px;
+        padding: 10px;
         position: absolute;
         z-index: 100;
         bottom: 125%;
         left: 50%;
-        transform: translateX(-50%);
+        margin-left: -130px;
         opacity: 0;
-        transition: opacity 0.3s;
+        transition: opacity 0.2s;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+        border: 1px solid #555;
+        font-size: 12px;
       }}
       .tooltip-container:hover .tooltip-content {{
         visibility: visible;
