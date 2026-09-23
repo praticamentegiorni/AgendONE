@@ -1875,58 +1875,60 @@ with tab4:
       }}
       .day-number {{
         font-weight: bold;
-        font-size: 13px;
-        color: #ffffff;
+        font-size: 14px;
+        color: #e2e8f0;
         margin-bottom: 4px;
       }}
       .badge-impegno {{
         background-color: #2563eb;
-        color: #ffffff;
+        color: white;
         padding: 2px 6px;
         border-radius: 4px;
         font-size: 11px;
         display: block;
+        margin-top: 2px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-bottom: 2px;
       }}
       .badge-impegno-multi {{
-        background-color: #d97706;
-        color: #ffffff;
+        background-color: #0d9488;
+        color: white;
         padding: 2px 6px;
         border-radius: 4px;
         font-size: 11px;
         display: block;
-        font-weight: bold;
-        margin-bottom: 2px;
+        margin-top: 2px;
       }}
       .tooltip-container {{
         position: relative;
         display: inline-block;
         width: 100%;
       }}
-      .tooltip-content {{
-        display: none;
+      .tooltip-container .tooltip-content {{
+        visibility: hidden;
+        width: 260px;
+        background-color: #0f172a;
+        color: #f8fafc;
+        text-align: left;
+        border-radius: 6px;
+        padding: 8px 12px;
         position: absolute;
-        z-index: 100;
-        background-color: #1e293b;
-        color: #ffffff;
-        padding: 12px;
-        border-radius: 8px;
-        width: 280px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        border: 1px solid #475569;
-        top: 100%;
-        left: 0;
+        z-index: 99;
+        bottom: 125%;
+        left: 50%;
+        margin-left: -130px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        border: 1px solid #334155;
         font-size: 12px;
-        line-height: 1.4;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
       }}
       .tooltip-container:hover .tooltip-content {{
-        display: block;
+        visibility: visible;
+        opacity: 1;
       }}
     </style>
-
     <table class="cal-table">
       <thead>
         <tr>{th_html}</tr>
