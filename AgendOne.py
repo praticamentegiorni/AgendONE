@@ -258,7 +258,6 @@ def parse_data_italiana(val):
         return pd.NaT
     val_str = str(val).strip()
     
-    # Se contiene trattini ed è in formato YYYY-MM-DD
     if "-" in val_str and len(val_str.split("-")[0]) == 4:
         try:
             dt = pd.to_datetime(val_str, format="%Y-%m-%d", errors="coerce")
@@ -267,7 +266,6 @@ def parse_data_italiana(val):
         except:
             pass
             
-    # Formato DD/MM/YYYY
     try:
         parti = val_str.split("/")
         if len(parti) == 3:
@@ -403,7 +401,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                 if "Data_dt" not in df_sorted.columns:
                     df_sorted["Data_dt"] = df_sorted["Data"].apply(parse_data_italiana)
                 
-                # Normalizzazione colonne per ordinamento in ordine: Data -> Orario Inizio -> Ente -> Classe
                 df_sorted["Orario_Inizio_norm"] = df_sorted["Orario Inizio"].apply(normalize_time_str)
                 df_sorted["Ente_norm"] = df_sorted["Ente"].fillna("").astype(str)
                 df_sorted["Classe_norm"] = df_sorted["Classe"].fillna("").astype(str)
@@ -441,7 +438,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                     ])
                     row_idx += 1
 
-                    # Estrazione e inserimento sotto-appuntamenti da Appunto_Multiplo
                     appunto_mult = str(row.get("Appunto_Multiplo", ""))
                     if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
                         sub_items = []
@@ -895,10 +891,12 @@ df = carica_dati()
 st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+# AGGIUNTO IL NUOVO MENU DEDICATO NEI TAB PRINCIPALI
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Inserisci Attività",
     "Gestione Tabelle & Combo",
     "Archivio, Modifica, Report & Riepilogo",
+    "Report Ore per Classe",
     "Calendario",
 ])
 
@@ -1703,8 +1701,167 @@ with tab3:
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
-# ================= TAB 4: CALENDARIO =================
+# ================= TAB 4: REPORT ORE PER CLASSE (NUOVO MENU DEDICATO) =================
 with tab4:
+    st.subheader("Report e Ricerca Ore per Classe (Scuola e Data)")
+    st.markdown("Seleziona la scuola (Ente) e l'intervallo temporale di riferimento. Il sistema estrarrà gli orari sia dai record diretti che dal campo multiplo, raggruppandoli per classe in ordine di data crescente con totali parziali e finali.")
+
+    if df.empty:
+        st.info("Nessun dato disponibile nell'archivio.")
+    else:
+        c_sc1, c_sc2, c_sc3 = st.columns(3)
+        with c_sc1:
+            enti_disponibili_menu = sorted(df["Ente"].dropna().unique().tolist() if "Ente" in df.columns else [])
+            scuola_selezionata = st.selectbox("Seleziona Scuola (Ente)", options=enti_disponibili_menu)
+        with c_sc2:
+            data_rif_inizio = st.date_input("Data Inizio Riferimento", value=datetime.date(datetime.date.today().year, 9, 1), format="DD/MM/YYYY", key="rep_classe_inizio")
+        with c_sc3:
+            data_rif_fine = st.date_input("Data Fine Riferimento", value=datetime.date.today(), format="DD/MM/YYYY", key="rep_classe_fine")
+
+        if st.button("Genera Report per Classe", type="primary", use_container_width=True):
+            df_cls = df.copy()
+            if "Data_dt" not in df_cls.columns:
+                df_cls["Data_dt"] = df_cls["Data"].apply(parse_data_italiana)
+            
+            # Filtro per scuola e date
+            if scuola_selezionata:
+                df_cls = df_cls[df_cls["Ente"] == scuola_selezionata]
+            
+            if data_rif_inizio:
+                df_cls = df_cls[df_cls["Data_dt"] >= pd.to_datetime(data_rif_inizio)]
+            if data_rif_fine:
+                df_cls = df_cls[df_cls["Data_dt"] <= pd.to_datetime(data_rif_fine)]
+
+            # Estrazione ed espansione righe (inclusi gli elementi presenti in Appunto_Multiplo)
+            righe_report_espandite = []
+            time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
+
+            for _, row in df_cls.iterrows():
+                if bool(row.get("Escludi_Conteggio", False)):
+                    continue # Salta gli elementi esclusi dal conteggio ore
+                
+                dt_val = row["Data_dt"]
+                data_str = dt_val.strftime("%d/%m/%Y") if pd.notnull(dt_val) else str(row.get("Data", ""))
+                appunto_mult = str(row.get("Appunto_Multiplo", ""))
+                
+                # Controllo se c'è un appuntamento multiplo strutturato
+                if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
+                    lines = [l.strip() for l in appunto_mult.split("\n") if l.strip()]
+                    has_matched_sub = False
+                    for line in lines:
+                        match = time_pattern.match(line)
+                        if match:
+                            has_matched_sub = true_val = True
+                            start_t = normalize_time_str(match.group(1))
+                            end_t = normalize_time_str(match.group(2))
+                            course_name = match.group(3).strip()
+                            ore_sub = calcola_ore(start_t, end_t)
+                            
+                            righe_report_espandite.append({
+                                "Data_dt": dt_val,
+                                "Data": data_str,
+                                "Classe": course_name if course_name else str(row.get("Classe", "Non Specificata")),
+                                "Orario": f"{start_t} - {end_t}",
+                                "Ore": ore_sub,
+                                "Sede": str(row.get("Sede", "")),
+                                "Note": str(row.get("Note", ""))
+                            })
+                    
+                    if not has_matched_sub:
+                        # Se il campo multiplo non ha il pattern orario, fallback sul record principale
+                        ore_princ = float(row.get("Ore", 0.0))
+                        righe_report_espandite.append({
+                            "Data_dt": dt_val,
+                            "Data": data_str,
+                            "Classe": str(row.get("Classe", "Non Specificata")),
+                            "Orario": f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
+                            "Ore": ore_princ,
+                            "Sede": str(row.get("Sede", "")),
+                            "Note": str(row.get("Note", ""))
+                        })
+                else:
+                    ore_princ = float(row.get("Ore", 0.0))
+                    righe_report_espandite.append({
+                        "Data_dt": dt_val,
+                        "Data": data_str,
+                        "Classe": str(row.get("Classe", "Non Specificata")),
+                        "Orario": f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
+                        "Ore": ore_princ,
+                        "Sede": str(row.get("Sede", "")),
+                        "Note": str(row.get("Note", ""))
+                    })
+
+            if not righe_report_espandite:
+                st.warning("Nessuna attività trovata per i criteri selezionati.")
+                st.session_state["df_report_classe_generato"] = pd.DataFrame()
+            else:
+                df_finale_cls = pd.DataFrame(righe_report_espandite)
+                # Ordinamento per data crescente
+                df_finale_cls = df_finale_cls.sort_values(by=["Data_dt", "Classe", "Orario"], ascending=[True, True, True])
+                st.session_state["df_report_classe_generato"] = df_finale_cls
+                st.session_state["scuola_report_generata"] = scuola_selezionata
+
+        # Mostra i risultati memorizzati nella sessione
+        if "df_report_classe_generato" in st.session_state and not st.session_state["df_report_classe_generato"].empty:
+            df_res = st.session_state["df_report_classe_generato"]
+            scuola_attuale = st.session_state.get("scuola_report_generata", "")
+            
+            st.markdown(f"### Risultati Report per la Scuola: **{scuola_attuale}**")
+            
+            # Raggruppamento visivo per Classe
+            classi_uniche = sorted(df_res["Classe"].unique().tolist())
+            totale_generale_ore = 0.0
+
+            for cls in classi_uniche:
+                df_c = df_res[df_res["Classe"] == cls]
+                ore_parziali_classe = df_c["Ore"].sum()
+                totale_generale_ore += ore_parziali_classe
+
+                st.markdown(f"#### Classe / Corso: `{cls}` (Parziale: **{ore_parziali_classe:.2f} ore**)")
+                
+                # Tabella sintetica per classe in ordine di data crescente
+                df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Ore"]].copy()
+                st.dataframe(df_c_mostra, use_container_width=True, hide_index=True)
+                st.markdown("---")
+
+            st.markdown(f"### 🎯 TOTALE GENERALE ORE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
+
+            # Pulsanti di esportazione CSV e Excel dedicati
+            st.markdown("##### Esportazione Dati")
+            ce_1, ce_2 = st.columns(2)
+            
+            df_export_cls = df_res.drop(columns=["Data_dt"], errors="ignore")
+            
+            with ce_1:
+                csv_cls_data = df_export_cls.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Scarica Report Classe in CSV",
+                    data=csv_cls_data,
+                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with ce_2:
+                buffer_excel_cls = io.BytesIO()
+                with pd.ExcelWriter(buffer_excel_cls, engine='xlsxwriter') as writer:
+                    df_export_cls.to_excel(writer, index=False, sheet_name='Report_Classe')
+                    worksheet_c = writer.sheets['Report_Classe']
+                    for i, col in enumerate(df_export_cls.columns):
+                        max_len_c = max(df_export_cls[col].astype(str).map(len).max(), len(str(col)))
+                        worksheet_c.set_column(i, i, max(max_len_c + 3, 12))
+                buffer_excel_cls.seek(0)
+                
+                st.download_button(
+                    label="Scarica Report Classe in Excel (XLSX)",
+                    data=buffer_excel_cls,
+                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+# ================= TAB 5: CALENDARIO =================
+with tab5:
     st.subheader("Vista Calendario Mensile")
     
     if "cal_anno" not in st.session_state:
