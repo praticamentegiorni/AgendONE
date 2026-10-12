@@ -3,22 +3,25 @@ import datetime
 import html
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 
-def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
-    """Genera la tabella HTML del calendario mensile per Streamlit.
+def genera_calendario_html_completo(
+    df_impegni: pd.DataFrame, anno: int, mese: int
+) -> str:
+    """Genera una pagina HTML/CSS pulita ed isolata per la griglia del calendario.
 
-    Gestisce in modo sicuro le date italiane (DD/MM/YYYY), i giorni vuoti e i
-    valori mancanti (NaN/None).
+    Gestisce in modo sicuro le date italiane (DD/MM/YYYY) ed i giorni vuoti di
+    inizio/fine mese.
     """
-    # 1. Copia e parsing sicuro del DataFrame
+    # 1. Copia e pulizia sicura del DataFrame
     if df_impegni is None or not isinstance(df_impegni, pd.DataFrame):
         df = pd.DataFrame()
     else:
         df = df_impegni.copy()
 
     if not df.empty and 'data' in df.columns:
-        # dayfirst=True evita l'errore tra Mesi/Giorni (es. 01/10/2026)
+        # dayfirst=True garantisce la conversione corretta per date tipo 01/10/2026
         df['data_dt'] = pd.to_datetime(
             df['data'], dayfirst=True, errors='coerce'
         ).dt.date
@@ -35,37 +38,43 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
         'Domenica',
     ]
 
-    # 2. CSS isolato (Stringa normale SENZA f-string per non mandare in errore le graffe {})
+    # 2. CSS isolato
     css_style = """
     <style>
+    body {
+        margin: 0;
+        padding: 5px;
+        background-color: #0e1117;
+        color: #e0e0e0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
     .cal-table {
         width: 100%;
         border-collapse: collapse;
         background-color: #121212;
-        color: #e0e0e0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        margin-bottom: 20px;
+        table-layout: fixed;
     }
     .cal-th {
         background-color: #1e1e1e;
         color: #ffffff;
-        padding: 10px;
+        padding: 10px 4px;
         border: 1px solid #333333;
         text-align: center;
-        font-size: 0.9em;
+        font-size: 0.85em;
+        font-weight: bold;
     }
     .cal-cell {
-        height: 95px;
-        width: 14.28%;
+        height: 100px;
         vertical-align: top;
         padding: 6px;
         border: 1px solid #2a2a2a;
         position: relative;
+        background-color: #141414;
     }
     .cal-cell-empty {
+        height: 100px;
         background-color: #0d0d0d;
-        border: 1px solid #1f1f1f;
-        width: 14.28%;
+        border: 1px solid #1a1a1a;
     }
     .day-number {
         font-weight: bold;
@@ -105,18 +114,18 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
     }
     .tooltip-container .tooltip-content {
         display: none;
-        width: 260px;
+        width: 250px;
         background-color: #1e1e1e;
         color: #f0f0f0;
         border: 1px solid #444444;
         border-radius: 6px;
         padding: 10px;
         position: absolute;
-        z-index: 999;
+        z-index: 9999;
         bottom: 110%;
         left: 50%;
         transform: translateX(-50%);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.8);
         font-size: 0.8em;
         line-height: 1.4;
     }
@@ -126,20 +135,27 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
     </style>
     """
 
-    # 3. Costruzione HTML
-    html_lines = [css_style, '<table class="cal-table"><thead><tr>']
-    for g in giorni_settimana:
-        html_lines.append(f'<th class="cal-th">{g}</th>')
-    html_lines.append('</tr></thead><tbody>')
+    # 3. Costruzione struttura HTML
+    html_out = [
+        '<!DOCTYPE html><html><head><meta charset="utf-8">',
+        css_style,
+        '</head><body>',
+    ]
+    html_out.append('<table class="cal-table"><thead><tr>')
 
+    for g in giorni_settimana:
+        html_out.append(f'<th class="cal-th">{g}</th>')
+    html_out.append('</tr></thead><tbody>')
+
+    # Genera matrice del mese (settimane)
     matrice = calendar.monthcalendar(anno, mese)
 
     for settimana in matrice:
-        html_lines.append('<tr>')
+        html_out.append('<tr>')
         for giorno in settimana:
-            # Gestione sicura inizio e fine mese (giorno == 0)
+            # Celle vuote prima del 1° del mese e dopo l'ultimo giorno del mese
             if giorno == 0:
-                html_lines.append('<td class="cal-cell-empty"></td>')
+                html_out.append('<td class="cal-cell-empty"></td>')
                 continue
 
             data_curr = datetime.date(anno, mese, giorno)
@@ -150,15 +166,15 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
                 sub_df = pd.DataFrame()
 
             if sub_df.empty:
-                html_lines.append(
-                    f'<td class="cal-cell" style="background-color:'
-                    f' #141414;"><div class="day-number">{giorno}</div></td>'
+                html_out.append(
+                    f'<td class="cal-cell"><div'
+                    f' class="day-number">{giorno}</div></td>'
                 )
             else:
                 n_ev = len(sub_df)
                 data_str = f'{giorno}/{mese}/{anno}'
 
-                # Badge
+                # Render del Badge
                 if n_ev == 1:
                     row = sub_df.iloc[0]
                     oi = html.escape(
@@ -180,7 +196,7 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
                 else:
                     badge = f'<span class="badge-impegno-multi">{n_ev} Appuntamenti</span>'
 
-                # Contenuto Tooltip
+                # Contenuto del Tooltip
                 items = []
                 for _, row in sub_df.iterrows():
                     oi = html.escape(
@@ -242,10 +258,61 @@ def genera_calendario_html(df_impegni, anno: int, mese: int) -> str:
                     f' class="tooltip-container">{badge}<div'
                     f' class="tooltip-content"><b>Impegni del'
                     ' {data_str}</b><hr style="margin:4px 0;'
-                    f' border-color:#444;">{tt_body}</div></div>td>'
+                    f' border-color:#444;">{tt_body}</div></div></td>'
                 )
-                html_lines.append(cell)
-        html_lines.append('</tr>')
+                html_out.append(cell)
+        html_out.append('</tr>')
 
-    html_lines.append('</tbody></table>')
-    return ''.join(html_lines)
+    html_out.append('</tbody></table></body></html>')
+    return ''.join(html_out)
+
+
+# --- ESEMPIO DI UTILIZZO E RENDERING IN STREAMLIT ---
+st.set_page_config(layout='wide', page_title='Calendario Impegni')
+
+st.title('Calendario Impegni - Ottobre 2026')
+
+# Dati di test
+dati_test = [
+    {
+        'data': '01/10/2026',
+        'ora_inizio': '14:30',
+        'ora_fine': '18:30',
+        'durata': 4.0,
+        'ente': 'Scuola Radio Elettra',
+        'classe': '25032_14 Impianti elettrici civili',
+        'sede': 'Ex Seminario',
+        'modalita': 'Presenza',
+        'note': 'con Landi',
+    },
+    {
+        'data': '01/10/2026',
+        'ora_inizio': '08:30',
+        'ora_fine': '13:00',
+        'durata': 4.5,
+        'ente': 'Scuola Bufalini',
+        'classe': 'AULA',
+        'sede': 'Via San Bartolomeo',
+        'modalita': 'Presenza',
+        'note': None,
+    },
+    {
+        'data': '02/10/2026',
+        'ora_inizio': '09:00',
+        'ora_fine': '18:00',
+        'durata': 9.0,
+        'ente': 'Scuola Radio Elettra',
+        'classe': '25032_12 Impianti elettrici civili',
+        'sede': 'Ex Seminario',
+        'modalita': 'Presenza',
+        'note': None,
+    },
+]
+
+df_impegni = pd.DataFrame(dati_test)
+
+# Genera il codice HTML completo
+html_calendario = genera_calendario_html_completo(df_impegni, anno=2026, mese=10)
+
+# Rendering sicuro dentro iframe
+components.html(html_calendario, height=650, scrolling=True)
