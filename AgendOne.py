@@ -1,10 +1,13 @@
+import calendar
 import datetime
+import html
 import io
 import json
 import os
 import re
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
@@ -891,7 +894,7 @@ df = carica_dati()
 st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
-# AGGIUNTO IL NUOVO MENU DEDICATO NEI TAB PRINCIPALI
+# MENU PRINCIPALE A TAB
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Inserisci Attività",
     "Gestione Tabelle & Combo",
@@ -1701,7 +1704,7 @@ with tab3:
                 else:
                     st.info("Tutti gli eventi risultano già sincronizzati.")
 
-# ================= TAB 4: REPORT ORE PER CLASSE (NUOVO MENU DEDICATO) =================
+# ================= TAB 4: REPORT ORE PER CLASSE =================
 with tab4:
     st.subheader("Report e Ricerca Ore per Classe (Scuola e Data)")
     st.markdown("Seleziona la scuola (Ente) e l'intervallo temporale di riferimento. Il sistema estrarrà gli orari sia dai record diretti che dal campo multiplo, raggruppandoli per classe in ordine di data crescente con totali parziali e finali.")
@@ -1751,7 +1754,7 @@ with tab4:
                     for line in lines:
                         match = time_pattern.match(line)
                         if match:
-                            has_matched_sub = true_val = True
+                            has_matched_sub = True
                             start_t = normalize_time_str(match.group(1))
                             end_t = normalize_time_str(match.group(2))
                             course_name = match.group(3).strip()
@@ -1797,302 +1800,3 @@ with tab4:
             else:
                 df_finale_cls = pd.DataFrame(righe_report_espandite)
                 # Ordinamento per data crescente
-                df_finale_cls = df_finale_cls.sort_values(by=["Data_dt", "Classe", "Orario"], ascending=[True, True, True])
-                st.session_state["df_report_classe_generato"] = df_finale_cls
-                st.session_state["scuola_report_generata"] = scuola_selezionata
-
-        # Mostra i risultati memorizzati nella sessione
-        if "df_report_classe_generato" in st.session_state and not st.session_state["df_report_classe_generato"].empty:
-            df_res = st.session_state["df_report_classe_generato"]
-            scuola_attuale = st.session_state.get("scuola_report_generata", "")
-            
-            st.markdown(f"### Risultati Report per la Scuola: **{scuola_attuale}**")
-            
-            # Raggruppamento visivo per Classe
-            classi_uniche = sorted(df_res["Classe"].unique().tolist())
-            totale_generale_ore = 0.0
-
-            for cls in classi_uniche:
-                df_c = df_res[df_res["Classe"] == cls]
-                ore_parziali_classe = df_c["Ore"].sum()
-                totale_generale_ore += ore_parziali_classe
-
-                st.markdown(f"#### Classe / Corso: `{cls}` (Parziale: **{ore_parziali_classe:.2f} ore**)")
-                
-                # Tabella sintetica per classe in ordine di data crescente
-                df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Ore"]].copy()
-                st.dataframe(df_c_mostra, use_container_width=True, hide_index=True)
-                st.markdown("---")
-
-            st.markdown(f"### 🎯 TOTALE GENERALE ORE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
-
-            # Pulsanti di esportazione CSV e Excel dedicati
-            st.markdown("##### Esportazione Dati")
-            ce_1, ce_2 = st.columns(2)
-            
-            df_export_cls = df_res.drop(columns=["Data_dt"], errors="ignore")
-            
-            with ce_1:
-                csv_cls_data = df_export_cls.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Scarica Report Classe in CSV",
-                    data=csv_cls_data,
-                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            
-            with ce_2:
-                buffer_excel_cls = io.BytesIO()
-                with pd.ExcelWriter(buffer_excel_cls, engine='xlsxwriter') as writer:
-                    df_export_cls.to_excel(writer, index=False, sheet_name='Report_Classe')
-                    worksheet_c = writer.sheets['Report_Classe']
-                    for i, col in enumerate(df_export_cls.columns):
-                        max_len_c = max(df_export_cls[col].astype(str).map(len).max(), len(str(col)))
-                        worksheet_c.set_column(i, i, max(max_len_c + 3, 12))
-                buffer_excel_cls.seek(0)
-                
-                st.download_button(
-                    label="Scarica Report Classe in Excel (XLSX)",
-                    data=buffer_excel_cls,
-                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-
-# ================= TAB 5: CALENDARIO =================
-with tab5:
-    st.subheader("Vista Calendario Mensile")
-    
-    if "cal_anno" not in st.session_state:
-        st.session_state["cal_anno"] = datetime.date.today().year
-    if "cal_mese" not in st.session_state:
-        st.session_state["cal_mese"] = datetime.date.today().month
-
-    col_nav1, col_nav2, col_nav3, col_nav4, col_nav5 = st.columns([1, 1, 2, 1, 1])
-    with col_nav1:
-        if st.button("<< Anno -", use_container_width=True):
-            st.session_state["cal_anno"] -= 1
-            st.rerun()
-    with col_nav2:
-        if st.button("< Mese -", use_container_width=True):
-            if st.session_state["cal_mese"] == 1:
-                st.session_state["cal_mese"] = 12
-                st.session_state["cal_anno"] -= 1
-            else:
-                st.session_state["cal_mese"] -= 1
-            st.rerun()
-    with col_nav3:
-        mese_corrente_nome = traduci_mese(datetime.date(st.session_state["cal_anno"], st.session_state["cal_mese"], 1).strftime("%B")).capitalize()
-        st.markdown(f"<h3 style='text-align: center; margin: 0;'>{mese_corrente_nome} {st.session_state['cal_anno']}</h3>", unsafe_allow_html=True)
-    with col_nav4:
-        if st.button("Mese + >", use_container_width=True):
-            if st.session_state["cal_mese"] == 12:
-                st.session_state["cal_mese"] = 1
-                st.session_state["cal_anno"] += 1
-            else:
-                st.session_state["cal_mese"] += 1
-            st.rerun()
-    with col_nav5:
-        if st.button("Anno + >>", use_container_width=True):
-            st.session_state["cal_anno"] += 1
-            st.rerun()
-
-    st.markdown("---")
-
-    df_cal = df.copy()
-    if not df_cal.empty:
-        df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
-        df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
-        
-        df_mese = df_cal[
-            (df_cal["Data_dt"].notna()) & 
-            (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
-            (df_cal["Data_dt"].dt.month == st.session_state["cal_mese"])
-        ]
-    else:
-        df_mese = pd.DataFrame()
-
-    num_appuntamenti_mensili = len(df_mese)
-    df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
-    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_mese.empty else 0.0
-
-    st.markdown(
-        f"""
-        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
-            <div style="background-color: #1c3d73; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
-                <span style="font-size: 14px; opacity: 0.8;">Numero Appuntamenti Mensili</span><br>
-                <span style="font-size: 22px; font-weight: bold;">{num_appuntamenti_mensili}</span>
-            </div>
-            <div style="background-color: #155c32; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
-                <span style="font-size: 14px; opacity: 0.8;">Ore Appuntamenti Mensili (Valide)</span><br>
-                <span style="font-size: 22px; font-weight: bold;">{ore_appuntamenti_mensili:.2f} h</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    import calendar
-    cal = calendar.Calendar(firstweekday=0)
-    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-    
-    impegni_per_giorno = {}
-    if not df_mese.empty:
-        for _, row in df_mese.iterrows():
-            giorno_num = row["Data_dt"].day
-            if giorno_num not in impegni_per_giorno:
-                impegni_per_giorno[giorno_num] = []
-            
-            impegni_per_giorno[giorno_num].append({
-                "ente": str(row.get("Ente", "")),
-                "classe": str(row.get("Classe", "")),
-                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
-                "ore": row.get("Ore", 0.0),
-                "sede": str(row.get("Sede", "")),
-                "modalita": str(row.get("Modalità", "")),
-                "note": str(row.get("Note", "")),
-                "svolto": bool(row.get("Svolto", False)),
-                "escluso": bool(row.get("Escludi_Conteggio", False))
-            })
-
-    html_righe = ""
-    for settimana in giorni_mese:
-        html_righe += "<tr>"
-        for giorno in settimana:
-            if giorno == 0:
-                html_righe += '<td class="cal-cell-empty"></td>'
-            else:
-                ha_impegni = giorno in impegni_per_giorno
-                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
-                
-                html_righe += f'<td class="cal-cell" style="{bg_style}">'
-                html_righe += f'<div class="day-number">{giorno}</div>'
-
-                if ha_impegni:
-                    lista_imp = impegni_per_giorno[giorno]
-                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b>"
-                    dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
-                    
-                    for imp in lista_imp:
-                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
-                        escl_nota = " [Escluso]" if imp["escluso"] else ""
-                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
-                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
-                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
-                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
-                        if imp['note']:
-                            dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
-                        dettaglio_html += "</div>"
-
-                    html_righe += '<div class="tooltip-container">'
-                    if len(lista_imp) == 1:
-                        imp_singolo = lista_imp[0]
-                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
-                        html_righe += f'<span class="badge-impegno">{testo_badge}</span>'
-                    else:
-                        html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
-                    
-                    html_righe += f'<div class="tooltip-content">{dettaglio_html}</div>'
-                    html_righe += '</div>'
-
-                html_righe += '</td>'
-        html_righe += "</tr>"
-
-    th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
-
-    html_cal = f"""
-    <style>
-      .cal-table {{
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-      }}
-      .cal-th {{
-        background-color: #1c3d73;
-        color: white;
-        text-align: center;
-        padding: 10px;
-        font-size: 14px;
-        border: 1px solid #333333;
-      }}
-      .cal-cell {{
-        height: 90px;
-        vertical-align: top;
-        padding: 6px;
-        border: 1px solid #444444;
-        background-color: #1e1e1e;
-        position: relative;
-      }}
-      .cal-cell-empty {{
-        background-color: #121212;
-        border: 1px solid #2a2a2a;
-        height: 90px;
-      }}
-      .day-number {{
-        font-weight: bold;
-        font-size: 14px;
-        color: #e2e8f0;
-        margin-bottom: 4px;
-      }}
-      .badge-impegno {{
-        background-color: #2563eb;
-        color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-        display: block;
-        margin-top: 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }}
-      .badge-impegno-multi {{
-        background-color: #0d9488;
-        color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-        display: block;
-        margin-top: 2px;
-      }}
-      .tooltip-container {{
-        position: relative;
-        display: inline-block;
-        width: 100%;
-      }}
-      .tooltip-container .tooltip-content {{
-        visibility: hidden;
-        width: 260px;
-        background-color: #0f172a;
-        color: #f8fafc;
-        text-align: left;
-        border-radius: 6px;
-        padding: 8px 12px;
-        position: absolute;
-        z-index: 99;
-        bottom: 125%;
-        left: 50%;
-        margin-left: -130px;
-        opacity: 0;
-        transition: opacity 0.3s;
-        border: 1px solid #334155;
-        font-size: 12px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-      }}
-      .tooltip-container:hover .tooltip-content {{
-        visibility: visible;
-        opacity: 1;
-      }}
-    </style>
-    <table class="cal-table">
-      <thead>
-        <tr>{th_html}</tr>
-      </thead>
-      <tbody>
-        {html_righe}
-      </tbody>
-    </table>
-    """
-    st.markdown(html_cal, unsafe_allow_html=True)
