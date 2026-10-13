@@ -7,7 +7,6 @@ import os
 import re
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 # Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
@@ -56,126 +55,6 @@ st.markdown(
         gap: 10px;
     }
 
-    /* Sfondo delle caselle del calendario (celeste chiaro) */
-    .fc-daygrid-day, .fc-timegrid-slot, .fc-theme-standard td {
-        background-color: #e6f2ff !important;
-    }
-
-    /* Giorno corrente */
-    .fc-day-today {
-        background-color: #cce5ff !important;
-    }
-
-    /* Eventi / Appuntamenti doppi (Blu) */
-    .fc-event.doppio-appuntamento, 
-    .fc-event[data-type="doppio"], 
-    .event-double {
-        background-color: #0044cc !important;
-        border-color: #002b80 !important;
-        color: #ffffff !important;
-    }
-
-    /* Banner XL al passaggio del mouse */
-    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
-        font-size: 2.2rem !important;
-        padding: 26px 36px !important;
-        min-width: 450px !important;
-        max-width: 750px !important;
-        border-radius: 16px !important;
-        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important;
-    }
-
-    .fc-popover-header, .tooltip-title {
-        font-size: 2.6rem !important;
-        font-weight: 900 !important;
-        margin-bottom: 14px !important;
-    }
-
-    .fc-popover-body, .tooltip-inner {
-        font-size: 2.0rem !important;
-        line-height: 1.6 !important;
-    }
-
-    /* Pulsanti Frecce Moderni Carousel */
-    .nav-btn {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: #1e293b;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 10;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .nav-btn:hover {
-      background: #ffffff;
-      transform: translateY(-50%) scale(1.1);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-      color: #2563eb;
-    }
-
-    .nav-btn-prev { left: 16px; }
-    .nav-btn-next { right: 16px; }
-
-    .nav-btn svg {
-      width: 24px;
-      height: 24px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.5;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    /* Banner Popup Ingrandito */
-    .preview-banner {
-      position: absolute;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      width: 85%;
-      max-width: 600px;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(12px);
-      padding: 20px 24px;
-      border-radius: 14px;
-      box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.8);
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      z-index: 20;
-    }
-
-    .carousel-container:hover .preview-banner {
-      opacity: 1;
-      visibility: visible;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    .preview-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin: 0 0 8px 0;
-    }
-
-    .preview-description {
-      font-size: 1.0rem;
-      color: #64748b;
-      margin: 0;
-    }
-
     /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
     div[data-testid="stDataEditor"] th div[title*="Orario"],
     div[data-testid="stDataEditor"] th div[title*="Selezione"],
@@ -217,18 +96,6 @@ st.markdown(
             font-size: 14px !important;
             padding: 8px 12px !important;
             margin-right: 4px !important;
-        }
-
-        .cal-cell {
-            height: 75px !important;
-            padding: 3px !important;
-        }
-        .day-number {
-            font-size: 11px !important;
-        }
-        .badge-impegno, .badge-impegno-multi {
-            font-size: 9px !important;
-            padding: 1px 3px !important;
         }
     }
     </style>
@@ -1800,3 +1667,312 @@ with tab4:
             else:
                 df_finale_cls = pd.DataFrame(righe_report_espandite)
                 # Ordinamento per data crescente
+                df_finale_cls = df_finale_cls.sort_values(by=["Data_dt", "Classe", "Orario"], ascending=[True, True, True])
+                st.session_state["df_report_classe_generato"] = df_finale_cls
+                st.session_state["scuola_report_generata"] = scuola_selezionata
+
+        # Mostra i risultati memorizzati nella sessione
+        if "df_report_classe_generato" in st.session_state and not st.session_state["df_report_classe_generato"].empty:
+            df_res = st.session_state["df_report_classe_generato"]
+            scuola_attuale = st.session_state.get("scuola_report_generata", "")
+            
+            st.markdown(f"### Risultati Report per la Scuola: **{scuola_attuale}**")
+            
+            # Raggruppamento visivo per Classe
+            classi_uniche = sorted(df_res["Classe"].unique().tolist())
+            totale_generale_ore = 0.0
+
+            for cls in classi_uniche:
+                df_c = df_res[df_res["Classe"] == cls]
+                ore_parziali_classe = df_c["Ore"].sum()
+                totale_generale_ore += ore_parziali_classe
+
+                st.markdown(f"#### Classe / Corso: `{cls}` (Parziale: **{ore_parziali_classe:.2f} ore**)")
+                
+                # Tabella sintetica per classe in ordine di data crescente
+                df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Ore"]].copy()
+                st.dataframe(df_c_mostra, use_container_width=True, hide_index=True)
+                st.markdown("---")
+
+            st.markdown(f"### 🎯 TOTALE GENERALE ORE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
+
+            # Pulsanti di esportazione CSV e Excel dedicati
+            st.markdown("##### Esportazione Dati")
+            ce_1, ce_2 = st.columns(2)
+            
+            df_export_cls = df_res.drop(columns=["Data_dt"], errors="ignore")
+            
+            with ce_1:
+                csv_cls_data = df_export_cls.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Scarica Report Classe in CSV",
+                    data=csv_cls_data,
+                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with ce_2:
+                buffer_excel_cls = io.BytesIO()
+                with pd.ExcelWriter(buffer_excel_cls, engine='xlsxwriter') as writer:
+                    df_export_cls.to_excel(writer, index=False, sheet_name='Report_Classe')
+                    worksheet_c = writer.sheets['Report_Classe']
+                    for i, col in enumerate(df_export_cls.columns):
+                        max_len_c = max(df_export_cls[col].astype(str).map(len).max(), len(str(col)))
+                        worksheet_c.set_column(i, i, max(max_len_c + 3, 12))
+                buffer_excel_cls.seek(0)
+                
+                st.download_button(
+                    label="Scarica Report Classe in Excel (XLSX)",
+                    data=buffer_excel_cls,
+                    file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+# ================= TAB 5: CALENDARIO (CORRETTO E NATIVO) =================
+with tab5:
+    st.subheader("Vista Calendario Mensile")
+    
+    if "cal_anno" not in st.session_state:
+        st.session_state["cal_anno"] = datetime.date.today().year
+    if "cal_mese" not in st.session_state:
+        st.session_state["cal_mese"] = datetime.date.today().month
+
+    col_nav1, col_nav2, col_nav3, col_nav4, col_nav5 = st.columns([1, 1, 2, 1, 1])
+    with col_nav1:
+        if st.button("<< Anno -", use_container_width=True):
+            st.session_state["cal_anno"] -= 1
+            st.rerun()
+    with col_nav2:
+        if st.button("< Mese -", use_container_width=True):
+            if st.session_state["cal_mese"] == 1:
+                st.session_state["cal_mese"] = 12
+                st.session_state["cal_anno"] -= 1
+            else:
+                st.session_state["cal_mese"] -= 1
+            st.rerun()
+    with col_nav3:
+        mese_corrente_nome = traduci_mese(datetime.date(st.session_state["cal_anno"], st.session_state["cal_mese"], 1).strftime("%B")).capitalize()
+        st.markdown(f"<h3 style='text-align: center; margin: 0;'>{mese_corrente_nome} {st.session_state['cal_anno']}</h3>", unsafe_allow_html=True)
+    with col_nav4:
+        if st.button("Mese + >", use_container_width=True):
+            if st.session_state["cal_mese"] == 12:
+                st.session_state["cal_mese"] = 1
+                st.session_state["cal_anno"] += 1
+            else:
+                st.session_state["cal_mese"] += 1
+            st.rerun()
+    with col_nav5:
+        if st.button("Anno + >>", use_container_width=True):
+            st.session_state["cal_anno"] += 1
+            st.rerun()
+
+    st.markdown("---")
+
+    df_cal = df.copy()
+    if not df_cal.empty:
+        df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
+        df_cal["Ore"] = df_cal.apply(lambda r: calcola_ore(r.get("Orario Inizio"), r.get("Orario Fine")), axis=1)
+        
+        df_mese = df_cal[
+            (df_cal["Data_dt"].notna()) & 
+            (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
+            (df_cal["Data_dt"].dt.month == st.session_state["cal_mese"])
+        ]
+    else:
+        df_mese = pd.DataFrame()
+
+    num_appuntamenti_mensili = len(df_mese)
+    df_ore_valide = df_mese[df_mese["Escludi_Conteggio"] != True] if not df_mese.empty else pd.DataFrame()
+    ore_appuntamenti_mensili = df_ore_valide["Ore"].sum() if not df_mese.empty else 0.0
+
+    st.markdown(
+        f"""
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="background-color: #1c3d73; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="font-size: 14px; opacity: 0.8;">Numero Appuntamenti Mensili</span><br>
+                <span style="font-size: 22px; font-weight: bold;">{num_appuntamenti_mensili}</span>
+            </div>
+            <div style="background-color: #155c32; color: white; padding: 12px 20px; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="font-size: 14px; opacity: 0.8;">Ore Appuntamenti Mensili (Valide)</span><br>
+                <span style="font-size: 22px; font-weight: bold;">{ore_appuntamenti_mensili:.2f} h</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    impegni_per_giorno = {}
+    if not df_mese.empty:
+        for _, row in df_mese.iterrows():
+            giorno_num = row["Data_dt"].day
+            if giorno_num not in impegni_per_giorno:
+                impegni_per_giorno[giorno_num] = []
+            
+            impegni_per_giorno[giorno_num].append({
+                "ente": html.escape(str(row.get("Ente", "")) if pd.notna(row.get("Ente")) else ""),
+                "classe": html.escape(str(row.get("Classe", "")) if pd.notna(row.get("Classe")) else ""),
+                "orario": html.escape(f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}"),
+                "ore": row.get("Ore", 0.0),
+                "sede": html.escape(str(row.get("Sede", "")) if pd.notna(row.get("Sede")) else ""),
+                "modalita": html.escape(str(row.get("Modalità", "")) if pd.notna(row.get("Modalità")) else ""),
+                "note": html.escape(str(row.get("Note", "")).strip()) if pd.notna(row.get("Note")) and str(row.get("Note")).strip() != "nan" else "",
+                "svolto": bool(row.get("Svolto", False)),
+                "escluso": bool(row.get("Escludi_Conteggio", False))
+            })
+
+    cal = calendar.Calendar(firstweekday=0)
+    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+
+    html_righe = ""
+    for settimana in giorni_mese:
+        html_righe += "<tr>"
+        for giorno in settimana:
+            if giorno == 0:
+                html_righe += '<td class="cal-cell-empty"></td>'
+            else:
+                ha_impegni = giorno in impegni_per_giorno
+                bg_style = "background-color: #183025; border: 1px solid #2fa866;" if ha_impegni else "background-color: #1e1e1e;"
+                
+                html_righe += f'<td class="cal-cell" style="{bg_style}">'
+                html_righe += f'<div class="day-number">{giorno}</div>'
+
+                if ha_impegni:
+                    lista_imp = impegni_per_giorno[giorno]
+                    dettaglio_html = f"<b>Impegni del {giorno}/{st.session_state['cal_mese']}/{st.session_state['cal_anno']}</b>"
+                    dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
+                    
+                    for imp in lista_imp:
+                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
+                        escl_nota = " [Escluso]" if imp["escluso"] else ""
+                        dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
+                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
+                        dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
+                        dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
+                        if imp['note']:
+                            dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
+                        dettaglio_html += "</div>"
+
+                    html_righe += '<div class="tooltip-container">'
+                    if len(lista_imp) == 1:
+                        imp_singolo = lista_imp[0]
+                        testo_badge = f"{imp_singolo['orario']} - {imp_singolo['classe']}"
+                        html_righe += f'<span class="badge-impegno">{testo_badge}</span>'
+                    else:
+                        html_righe += f'<span class="badge-impegno-multi">{len(lista_imp)} Appuntamenti</span>'
+                    
+                    html_righe += f'<div class="tooltip-content">{dettaglio_html}</div>'
+                    html_righe += '</div>'
+
+                html_righe += '</td>'
+        html_righe += "</tr>"
+
+    th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
+
+    full_html = f"""
+    <style>
+      .cal-wrapper {{
+        width: 100%;
+        overflow-x: auto;
+        margin-top: 10px;
+      }}
+      .cal-table {{
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        background-color: #0e1117;
+        color: #e0e0e0;
+      }}
+      .cal-th {{
+        background-color: #1c3d73;
+        color: #ffffff;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+        border: 1px solid #333333;
+      }}
+      .cal-cell {{
+        height: 95px;
+        vertical-align: top;
+        padding: 6px;
+        border: 1px solid #444444;
+        background-color: #1e1e1e;
+        position: relative;
+      }}
+      .cal-cell-empty {{
+        background-color: #121212;
+        border: 1px solid #2a2a2a;
+        height: 95px;
+      }}
+      .day-number {{
+        font-weight: bold;
+        font-size: 14px;
+        color: #e2e8f0;
+        margin-bottom: 4px;
+      }}
+      .badge-impegno {{
+        background-color: #2563eb;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        display: block;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }}
+      .badge-impegno-multi {{
+        background-color: #0d9488;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        display: block;
+        margin-top: 2px;
+      }}
+      .tooltip-container {{
+        position: relative;
+        display: inline-block;
+        width: 100%;
+      }}
+      .tooltip-container .tooltip-content {{
+        visibility: hidden;
+        width: 260px;
+        background-color: #0f172a;
+        color: #f8fafc;
+        text-align: left;
+        border-radius: 6px;
+        padding: 8px 12px;
+        position: absolute;
+        z-index: 9999;
+        bottom: 125%;
+        left: 50%;
+        margin-left: -130px;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        border: 1px solid #334155;
+        font-size: 12px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+      }}
+      .tooltip-container:hover .tooltip-content {{
+        visibility: visible;
+        opacity: 1;
+      }}
+    </style>
+    <div class="cal-wrapper">
+      <table class="cal-table">
+        <thead>
+          <tr>{th_html}</tr>
+        </thead>
+        <tbody>
+          {html_righe}
+        </tbody>
+      </table>
+    </div>
+    """
+    
+    st.markdown(full_html, unsafe_allow_html=True)
