@@ -1,6 +1,4 @@
-import calendar
 import datetime
-import html
 import io
 import json
 import os
@@ -55,6 +53,126 @@ st.markdown(
         gap: 10px;
     }
 
+    /* Sfondo delle caselle del calendario (celeste chiaro) */
+    .fc-daygrid-day, .fc-timegrid-slot, .fc-theme-standard td {
+        background-color: #e6f2ff !important;
+    }
+
+    /* Giorno corrente */
+    .fc-day-today {
+        background-color: #cce5ff !important;
+    }
+
+    /* Eventi / Appuntamenti doppi (Blu) */
+    .fc-event.doppio-appuntamento, 
+    .fc-event[data-type="doppio"], 
+    .event-double {
+        background-color: #0044cc !important;
+        border-color: #002b80 !important;
+        color: #ffffff !important;
+    }
+
+    /* Banner XL al passaggio del mouse */
+    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
+        font-size: 2.2rem !important;
+        padding: 26px 36px !important;
+        min-width: 450px !important;
+        max-width: 750px !important;
+        border-radius: 16px !important;
+        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .fc-popover-header, .tooltip-title {
+        font-size: 2.6rem !important;
+        font-weight: 900 !important;
+        margin-bottom: 14px !important;
+    }
+
+    .fc-popover-body, .tooltip-inner {
+        font-size: 2.0rem !important;
+        line-height: 1.6 !important;
+    }
+
+    /* Pulsanti Frecce Moderni Carousel */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .nav-btn:hover {
+      background: #ffffff;
+      transform: translateY(-50%) scale(1.1);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      color: #2563eb;
+    }
+
+    .nav-btn-prev { left: 16px; }
+    .nav-btn-next { right: 16px; }
+
+    .nav-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Banner Popup Ingrandito */
+    .preview-banner {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      width: 85%;
+      max-width: 600px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 20px 24px;
+      border-radius: 14px;
+      box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 20;
+    }
+
+    .carousel-container:hover .preview-banner {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .preview-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 8px 0;
+    }
+
+    .preview-description {
+      font-size: 1.0rem;
+      color: #64748b;
+      margin: 0;
+    }
+
     /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
     div[data-testid="stDataEditor"] th div[title*="Orario"],
     div[data-testid="stDataEditor"] th div[title*="Selezione"],
@@ -96,6 +214,18 @@ st.markdown(
             font-size: 14px !important;
             padding: 8px 12px !important;
             margin-right: 4px !important;
+        }
+
+        .cal-cell {
+            height: 75px !important;
+            padding: 3px !important;
+        }
+        .day-number {
+            font-size: 11px !important;
+        }
+        .badge-impegno, .badge-impegno-multi {
+            font-size: 9px !important;
+            padding: 1px 3px !important;
         }
     }
     </style>
@@ -158,6 +288,80 @@ def normalize_time_str(t_str):
     except:
         pass
     return t_str
+
+# Converte orario in minuti dall'inizio della giornata
+def time_to_minutes(t_str):
+    try:
+        t_str = str(t_str).strip()
+        parts = t_str.split(":")
+        h = int(parts[0])
+        m = int(parts[1])
+        return h * 60 + m
+    except:
+        return 0
+
+# Trova tutti gli appuntamenti con sovrapposizione di orario nella stessa data
+def trova_sovrapposizioni(df_input):
+    ids_sovrapposti = set()
+    dettagli_sovrapposizioni = []
+    
+    if df_input.empty or "Data" not in df_input.columns:
+        return ids_sovrapposti, dettagli_sovrapposizioni
+        
+    df_calc = df_input.copy()
+    if "ID_originale" in df_calc.columns:
+        df_calc["row_id"] = df_calc["ID_originale"]
+    elif "ID" in df_calc.columns:
+        df_calc["row_id"] = df_calc["ID"]
+    else:
+        df_calc["row_id"] = df_calc.index
+
+    df_calc["Data_key"] = df_calc["Data"].apply(
+        lambda d: parse_data_italiana(d).strftime("%Y-%m-%d") if pd.notnull(parse_data_italiana(d)) else str(d).strip()
+    )
+
+    grouped = df_calc.groupby("Data_key")
+    for data_val, group in grouped:
+        if len(group) < 2:
+            continue
+        rows = group.to_dict("records")
+        n = len(rows)
+        for i in range(n):
+            r1 = rows[i]
+            s1 = time_to_minutes(r1.get("Orario Inizio", "00:00"))
+            e1 = time_to_minutes(r1.get("Orario Fine", "00:00"))
+            if s1 >= e1:
+                continue
+            for j in range(i + 1, n):
+                r2 = rows[j]
+                s2 = time_to_minutes(r2.get("Orario Inizio", "00:00"))
+                e2 = time_to_minutes(r2.get("Orario Fine", "00:00"))
+                if s2 >= e2:
+                    continue
+                
+                # Controllo sovrapposizione intervalli orari
+                if s1 < e2 and s2 < e1:
+                    id1 = r1["row_id"]
+                    id2 = r2["row_id"]
+                    ids_sovrapposti.add(id1)
+                    ids_sovrapposti.add(id2)
+                    
+                    dt_fmt = parse_data_italiana(data_val)
+                    d_str = dt_fmt.strftime("%d/%m/%Y") if pd.notnull(dt_fmt) else data_val
+                    
+                    dettagli_sovrapposizioni.append({
+                        "Data_str": d_str,
+                        "App1_ID": id1,
+                        "App1_Ente": r1.get("Ente", ""),
+                        "App1_Classe": r1.get("Classe", ""),
+                        "App1_Orario": f"{r1.get('Orario Inizio')} - {r1.get('Orario Fine')}",
+                        "App2_ID": id2,
+                        "App2_Ente": r2.get("Ente", ""),
+                        "App2_Classe": r2.get("Classe", ""),
+                        "App2_Orario": f"{r2.get('Orario Inizio')} - {r2.get('Orario Fine')}",
+                    })
+                    
+    return ids_sovrapposti, dettagli_sovrapposizioni
 
 # Calcolo automatico delle ore tra inizio e fine
 def calcola_ore(ora_inizio, ora_fine):
@@ -761,7 +965,6 @@ df = carica_dati()
 st.title("Gestione Orari e Classi - AgendOne")
 st.markdown("---")
 
-# MENU PRINCIPALE A TAB
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Inserisci Attività",
     "Gestione Tabelle & Combo",
@@ -1023,6 +1226,12 @@ with tab2:
 with tab3:
     st.subheader("Storico, Modifica e Gestione Appuntamenti")
 
+    if "selezionati_ids" not in st.session_state:
+        st.session_state["selezionati_ids"] = []
+
+    if "mostra_sovrapposti" not in st.session_state:
+        st.session_state["mostra_sovrapposti"] = False
+
     if not df.empty:
         df_vis = df.copy()
         df_vis["ID_originale"] = df_vis.index
@@ -1039,12 +1248,19 @@ with tab3:
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
             df_vis = df_vis[cols + ["ID_originale"]]
 
+        # Calcolo appuntamenti con sovrapposizione oraria
+        ids_sovrapposti, dettagli_sovrapposizioni = trova_sovrapposizioni(df_vis)
+
+        if len(ids_sovrapposti) > 0:
+            st.warning(f"⚠️ **Attenzione:** Rilevati **{len(ids_sovrapposti)} appuntamenti** con sovrapposizione di orario. Sono stati evidenziati in **rosso** nella tabella.")
+
         filtro = st.text_input("Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
         df_mostra = df_vis.copy()
         if filtro:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
-        df_mostra.insert(0, "Selezione", False)
+        # Mantieni lo stato di selezione senza azzerarlo al rerun per conservare la posizione
+        df_mostra.insert(0, "Selezione", df_mostra["ID_originale"].isin(st.session_state["selezionati_ids"]))
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
 
@@ -1052,8 +1268,15 @@ with tab3:
         df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
 
         def colora_righe_tabella(row):
+            row_id = df_mostra.loc[row.name, "ID"]
             svolto = row.get("Svolto", False)
-            if svolto:
+            
+            if row_id in ids_sovrapposti:
+                if svolto:
+                    base_style = 'background-color: #7f1d1d; color: #ffffff; font-weight: bold; text-decoration: line-through'
+                else:
+                    base_style = 'background-color: #dc2626; color: #ffffff; font-weight: bold'
+            elif svolto:
                 base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'
             else:
                 mod = str(row.get("Modalità", "")).lower()
@@ -1102,8 +1325,9 @@ with tab3:
             st.rerun()
 
         righe_selezionate = df_mostra[df_editato["Selezione"] == True]["ID"].tolist() if "Selezione" in df_editato.columns and "ID" in df_mostra.columns else []
+        st.session_state["selezionati_ids"] = righe_selezionate
 
-        col_act1, col_act2 = st.columns(2)
+        col_act1, col_act2, col_act3 = st.columns(3)
         with col_act1:
             if st.button("Elimina Selezionati", type="primary", use_container_width=True):
                 if righe_selezionate:
@@ -1112,6 +1336,7 @@ with tab3:
                         if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(righe_selezionate).reset_index(drop=True)
+                    st.session_state["selezionati_ids"] = []
                     salva_dati(df)
                     st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
@@ -1143,6 +1368,9 @@ with tab3:
                     nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
                     
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
+                    nuovo_idx = len(df) - 1
+                    # Mantieni selezionato il nuovo appuntamento duplicato per non perdere la posizione
+                    st.session_state["selezionati_ids"] = [nuovo_idx]
                     salva_dati(df)
                     st.success("Appuntamento duplicato e aggiunto a Calendar!")
                     st.rerun()
@@ -1150,6 +1378,47 @@ with tab3:
                     st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
                 else:
                     st.warning("Seleziona un appuntamento da duplicare.")
+        with col_act3:
+            lbl_sovr = f"Lista appuntamenti sovrapposti ({len(ids_sovrapposti)})" if ids_sovrapposti else "Lista appuntamenti sovrapposti"
+            if st.button(lbl_sovr, use_container_width=True):
+                st.session_state["mostra_sovrapposti"] = not st.session_state.get("mostra_sovrapposti", False)
+                st.rerun()
+
+        if st.session_state.get("mostra_sovrapposti", False):
+            st.markdown("---")
+            st.subheader("⚠️ Dettaglio Appuntamenti Sovrapposti")
+            if not ids_sovrapposti:
+                st.success("Nessun appuntamento risulta in sovrapposizione di orario.")
+            else:
+                st.info("Di seguito sono elencati tutti gli appuntamenti con sovrapposizione di orario raggruppati per data:")
+                df_sovr_disp = df_vis[df_vis["ID_originale"].isin(ids_sovrapposti)].copy()
+                
+                for data_val, grp in df_sovr_disp.groupby("Data"):
+                    dt_p = parse_data_italiana(data_val)
+                    data_f = dt_p.strftime("%d/%m/%Y") if pd.notnull(dt_p) else str(data_val)
+                    st.markdown(f"##### 📅 **Data: {data_f}** ({len(grp)} appuntamenti sovrapposti)")
+                    
+                    for _, r_sovr in grp.iterrows():
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #dc2626; color: #ffffff; padding: 12px 18px; border-radius: 8px; margin-bottom: 8px;">
+                                <strong>⏰ Orario: {r_sovr.get('Orario Inizio', '')} - {r_sovr.get('Orario Fine', '')}</strong> ({calcola_ore(r_sovr.get('Orario Inizio'), r_sovr.get('Orario Fine')):.2f}h)<br>
+                                <strong>Ente:</strong> {r_sovr.get('Ente', 'N/D')} | <strong>Classe/Committente:</strong> {r_sovr.get('Classe', '')} | <strong>Sede:</strong> {r_sovr.get('Sede', '')} | <strong>Modalità:</strong> {r_sovr.get('Modalità', '')}<br>
+                                <em>Note:</em> {r_sovr.get('Note', '') if pd.notnull(r_sovr.get('Note')) and str(r_sovr.get('Note')).strip() else 'Nessuna nota'}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                
+                cs1, cs2 = st.columns(2)
+                with cs1:
+                    if st.button("Seleziona tutti i sovrapposti nell'archivio", use_container_width=True):
+                        st.session_state["selezionati_ids"] = list(ids_sovrapposti)
+                        st.rerun()
+                with cs2:
+                    if st.button("Chiudi Dettaglio Sovrapposti", use_container_width=True):
+                        st.session_state["mostra_sovrapposti"] = False
+                        st.rerun()
 
         st.markdown("---")
 
@@ -1358,6 +1627,8 @@ with tab3:
                             cal_id = sincronizza_google_calendar("crea", dati_evento)
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
+                        # Mantieni attiva la riga modificata
+                        st.session_state["selezionati_ids"] = [riga_idx]
                         salva_dati(df)
                         st.success("Modifiche salvate e calendario aggiornato!")
                         st.rerun()
@@ -1445,7 +1716,7 @@ with tab3:
             st.markdown("---")
             st.markdown("### Elenco Attività in Evidenza")
 
-            for _, row in df_report.iterrows():
+            for idx_r, row in df_report.iterrows():
                 parsed_dt = parse_data_italiana(row["Data"])
                 data_formattata = parsed_dt.strftime("%d/%m/%Y") if pd.notnull(parsed_dt) else str(row["Data"])
                 ente = str(row.get("Ente", ""))
@@ -1460,10 +1731,16 @@ with tab3:
                 note = str(row["Note"]) if pd.notnull(row["Note"]) else ""
                 appunto_mult = str(row.get("Appunto_Multiplo", "")) if pd.notnull(row.get("Appunto_Multiplo", "")) else ""
 
+                is_overlap = (idx_r in ids_sovrapposti)
+
                 if svolto_card:
                     bg_color = "#2b2b2b"
                     border_color = "#444444"
                     text_style = "color: #7f7f7f; text-decoration: line-through;"
+                elif is_overlap:
+                    bg_color = "#dc2626"
+                    border_color = "#f87171"
+                    text_style = "color: #ffffff; font-weight: bold;"
                 else:
                     mod_lower = modalita.lower()
                     if "presenza" in mod_lower:
@@ -1477,13 +1754,14 @@ with tab3:
                         border_color = "#555555"
                     text_style = "color: #ffffff;"
 
+                badge_sovr = " | <span style='color: #fca5a5; font-weight: bold;'>[⚠️ SOVRAPPOSIZIONE ORARIA]</span>" if is_overlap else ""
                 badge_escluso = " | <span style='color: #ff9999;'>[Escluso conteggio]</span>" if escluso_card else ""
                 multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
 
                 st.markdown(
                     f"""
                     <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; {text_style}">
-                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h){badge_escluso}<br>
+                        <strong>{data_formattata}</strong> | {orario_i} - {orario_f} ({ore_val:.2f}h){badge_sovr}{badge_escluso}<br>
                         <strong>Ente:</strong> {ente if ente else 'N/D'} | <strong>Classe/Committente:</strong> {classe} | <strong>Sede:</strong> {sede} | <strong>Modalità:</strong> {modalita}<br>
                         <em>Note:</em> {note if note else 'Nessuna nota'}
                         {multiplo_html}
@@ -1593,7 +1871,6 @@ with tab4:
             if "Data_dt" not in df_cls.columns:
                 df_cls["Data_dt"] = df_cls["Data"].apply(parse_data_italiana)
             
-            # Filtro per scuola e date
             if scuola_selezionata:
                 df_cls = df_cls[df_cls["Ente"] == scuola_selezionata]
             
@@ -1602,19 +1879,17 @@ with tab4:
             if data_rif_fine:
                 df_cls = df_cls[df_cls["Data_dt"] <= pd.to_datetime(data_rif_fine)]
 
-            # Estrazione ed espansione righe (inclusi gli elementi presenti in Appunto_Multiplo)
             righe_report_espandite = []
             time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
 
             for _, row in df_cls.iterrows():
                 if bool(row.get("Escludi_Conteggio", False)):
-                    continue # Salta gli elementi esclusi dal conteggio ore
+                    continue
                 
                 dt_val = row["Data_dt"]
                 data_str = dt_val.strftime("%d/%m/%Y") if pd.notnull(dt_val) else str(row.get("Data", ""))
                 appunto_mult = str(row.get("Appunto_Multiplo", ""))
                 
-                # Controllo se c'è un appuntamento multiplo strutturato
                 if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
                     lines = [l.strip() for l in appunto_mult.split("\n") if l.strip()]
                     has_matched_sub = False
@@ -1638,7 +1913,6 @@ with tab4:
                             })
                     
                     if not has_matched_sub:
-                        # Se il campo multiplo non ha il pattern orario, fallback sul record principale
                         ore_princ = float(row.get("Ore", 0.0))
                         righe_report_espandite.append({
                             "Data_dt": dt_val,
@@ -1666,19 +1940,16 @@ with tab4:
                 st.session_state["df_report_classe_generato"] = pd.DataFrame()
             else:
                 df_finale_cls = pd.DataFrame(righe_report_espandite)
-                # Ordinamento per data crescente
                 df_finale_cls = df_finale_cls.sort_values(by=["Data_dt", "Classe", "Orario"], ascending=[True, True, True])
                 st.session_state["df_report_classe_generato"] = df_finale_cls
                 st.session_state["scuola_report_generata"] = scuola_selezionata
 
-        # Mostra i risultati memorizzati nella sessione
         if "df_report_classe_generato" in st.session_state and not st.session_state["df_report_classe_generato"].empty:
             df_res = st.session_state["df_report_classe_generato"]
             scuola_attuale = st.session_state.get("scuola_report_generata", "")
             
             st.markdown(f"### Risultati Report per la Scuola: **{scuola_attuale}**")
             
-            # Raggruppamento visivo per Classe
             classi_uniche = sorted(df_res["Classe"].unique().tolist())
             totale_generale_ore = 0.0
 
@@ -1689,14 +1960,12 @@ with tab4:
 
                 st.markdown(f"#### Classe / Corso: `{cls}` (Parziale: **{ore_parziali_classe:.2f} ore**)")
                 
-                # Tabella sintetica per classe in ordine di data crescente
                 df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Ore"]].copy()
                 st.dataframe(df_c_mostra, use_container_width=True, hide_index=True)
                 st.markdown("---")
 
             st.markdown(f"### 🎯 TOTALE GENERALE ORE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
 
-            # Pulsanti di esportazione CSV e Excel dedicati
             st.markdown("##### Esportazione Dati")
             ce_1, ce_2 = st.columns(2)
             
@@ -1730,7 +1999,7 @@ with tab4:
                     use_container_width=True
                 )
 
-# ================= TAB 5: CALENDARIO (CORRETTO E NATIVO) =================
+# ================= TAB 5: CALENDARIO =================
 with tab5:
     st.subheader("Vista Calendario Mensile")
     
@@ -1803,6 +2072,11 @@ with tab5:
         unsafe_allow_html=True
     )
 
+    import calendar
+    cal = calendar.Calendar(firstweekday=0)
+    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    
     impegni_per_giorno = {}
     if not df_mese.empty:
         for _, row in df_mese.iterrows():
@@ -1811,20 +2085,16 @@ with tab5:
                 impegni_per_giorno[giorno_num] = []
             
             impegni_per_giorno[giorno_num].append({
-                "ente": html.escape(str(row.get("Ente", "")) if pd.notna(row.get("Ente")) else ""),
-                "classe": html.escape(str(row.get("Classe", "")) if pd.notna(row.get("Classe")) else ""),
-                "orario": html.escape(f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}"),
+                "ente": str(row.get("Ente", "")),
+                "classe": str(row.get("Classe", "")),
+                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
                 "ore": row.get("Ore", 0.0),
-                "sede": html.escape(str(row.get("Sede", "")) if pd.notna(row.get("Sede")) else ""),
-                "modalita": html.escape(str(row.get("Modalità", "")) if pd.notna(row.get("Modalità")) else ""),
-                "note": html.escape(str(row.get("Note", "")).strip()) if pd.notna(row.get("Note")) and str(row.get("Note")).strip() != "nan" else "",
+                "sede": str(row.get("Sede", "")),
+                "modalita": str(row.get("Modalità", "")),
+                "note": str(row.get("Note", "")),
                 "svolto": bool(row.get("Svolto", False)),
                 "escluso": bool(row.get("Escludi_Conteggio", False))
             })
-
-    cal = calendar.Calendar(firstweekday=0)
-    giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
     html_righe = ""
     for settimana in giorni_mese:
@@ -1871,30 +2141,23 @@ with tab5:
 
     th_html = "".join([f'<th class="cal-th">{gs}</th>' for gs in giorni_settimana])
 
-    full_html = f"""
+    html_cal = f"""
     <style>
-      .cal-wrapper {{
-        width: 100%;
-        overflow-x: auto;
-        margin-top: 10px;
-      }}
       .cal-table {{
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        background-color: #0e1117;
-        color: #e0e0e0;
       }}
       .cal-th {{
         background-color: #1c3d73;
-        color: #ffffff;
+        color: white;
         text-align: center;
         padding: 10px;
         font-size: 14px;
         border: 1px solid #333333;
       }}
       .cal-cell {{
-        height: 95px;
+        height: 90px;
         vertical-align: top;
         padding: 6px;
         border: 1px solid #444444;
@@ -1904,7 +2167,7 @@ with tab5:
       .cal-cell-empty {{
         background-color: #121212;
         border: 1px solid #2a2a2a;
-        height: 95px;
+        height: 90px;
       }}
       .day-number {{
         font-weight: bold;
@@ -1947,32 +2210,28 @@ with tab5:
         border-radius: 6px;
         padding: 8px 12px;
         position: absolute;
-        z-index: 9999;
+        z-index: 99;
         bottom: 125%;
         left: 50%;
         margin-left: -130px;
         opacity: 0;
-        transition: opacity 0.2s ease-in-out;
+        transition: opacity 0.3s;
         border: 1px solid #334155;
         font-size: 12px;
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-        pointer-events: none;
       }}
       .tooltip-container:hover .tooltip-content {{
         visibility: visible;
         opacity: 1;
       }}
     </style>
-    <div class="cal-wrapper">
-      <table class="cal-table">
-        <thead>
-          <tr>{th_html}</tr>
-        </thead>
-        <tbody>
-          {html_righe}
-        </tbody>
-      </table>
-    </div>
+    <table class="cal-table">
+      <thead>
+        <tr>{th_html}</tr>
+      </thead>
+      <tbody>
+        {html_righe}
+      </tbody>
+    </table>
     """
-    
-    st.markdown(full_html, unsafe_allow_html=True)
+    st.markdown(html_cal, unsafe_allow_html=True)
