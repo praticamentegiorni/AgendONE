@@ -2029,6 +2029,9 @@ with tab4:
 
 # ================= TAB 5: CALENDARIO =================
 with tab5:
+    import html
+    import calendar
+
     st.subheader("Vista Calendario Mensile")
     
     if "cal_anno" not in st.session_state:
@@ -2072,6 +2075,10 @@ with tab5:
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(calcola_ore_effettive, axis=1)
         
+        # Ordinamento cronologico degli appuntamenti nell'arco della giornata
+        df_cal["Orario_Inizio_norm"] = df_cal["Orario Inizio"].apply(normalize_time_str)
+        df_cal = df_cal.sort_values(by=["Data_dt", "Orario_Inizio_norm"], ascending=[True, True])
+        
         df_mese = df_cal[
             (df_cal["Data_dt"].notna()) & 
             (df_cal["Data_dt"].dt.year == st.session_state["cal_anno"]) & 
@@ -2100,7 +2107,6 @@ with tab5:
         unsafe_allow_html=True
     )
 
-    import calendar
     cal = calendar.Calendar(firstweekday=0)
     giorni_mese = cal.monthdayscalendar(st.session_state["cal_anno"], st.session_state["cal_mese"])
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
@@ -2112,14 +2118,20 @@ with tab5:
             if giorno_num not in impegni_per_giorno:
                 impegni_per_giorno[giorno_num] = []
             
+            note_clean = str(row.get("Note", "")) if pd.notnull(row.get("Note")) and str(row.get("Note")).strip().lower() not in ["nan", "none"] else ""
+            ente_clean = str(row.get("Ente", "")) if pd.notnull(row.get("Ente")) and str(row.get("Ente")).strip().lower() not in ["nan", "none"] else ""
+            classe_clean = str(row.get("Classe", "")) if pd.notnull(row.get("Classe")) and str(row.get("Classe")).strip().lower() not in ["nan", "none"] else ""
+            sede_clean = str(row.get("Sede", "")) if pd.notnull(row.get("Sede")) and str(row.get("Sede")).strip().lower() not in ["nan", "none"] else ""
+            modalita_clean = str(row.get("Modalità", "")) if pd.notnull(row.get("Modalità")) and str(row.get("Modalità")).strip().lower() not in ["nan", "none"] else ""
+
             impegni_per_giorno[giorno_num].append({
-                "ente": str(row.get("Ente", "")),
-                "classe": str(row.get("Classe", "")),
-                "orario": f"{str(row.get('Orario Inizio', ''))} - {str(row.get('Orario Fine', ''))}",
-                "ore": row.get("Ore", 0.0),
-                "sede": str(row.get("Sede", "")),
-                "modalita": str(row.get("Modalità", "")),
-                "note": str(row.get("Note", "")),
+                "ente": html.escape(ente_clean),
+                "classe": html.escape(classe_clean),
+                "orario": f"{html.escape(str(row.get('Orario Inizio', '')))} - {html.escape(str(row.get('Orario Fine', '')))}",
+                "ore": float(row.get("Ore", 0.0)),
+                "sede": html.escape(sede_clean),
+                "modalita": html.escape(modalita_clean),
+                "note": html.escape(note_clean),
                 "svolto": bool(row.get("Svolto", False)),
                 "escluso": bool(row.get("Escludi_Conteggio", False))
             })
@@ -2146,11 +2158,12 @@ with tab5:
                         barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
                         escl_nota = " [Escluso]" if imp["escluso"] else ""
                         dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
-                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']}h){escl_nota}<br>"
+                        dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']:.1f}h){escl_nota}<br>"
                         dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
                         dettaglio_html += f"<b>Sede:</b> {imp['sede']} ({imp['modalita']})"
                         if imp['note']:
-                            dettaglio_html += f"<br><em>Note:</em> {imp['note']}"
+                            note_formatted = imp['note'].replace('\n', '<br>')
+                            dettaglio_html += f"<br><em>Note:</em> {note_formatted}"
                         dettaglio_html += "</div>"
 
                     html_righe += '<div class="tooltip-container">'
