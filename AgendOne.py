@@ -385,10 +385,6 @@ def calcola_ore(ora_inizio, ora_fine):
 
 # Calcolo delle ore effettive tenendo conto degli inserimenti multipli
 def calcola_ore_effettive(row):
-    # Se l'appuntamento è escluso dal conteggio, restituisce 0 ore
-    if bool(row.get("Escludi_Conteggio", False)):
-        return 0.0
-
     appunto_mult = str(row.get("Appunto_Multiplo", "")) if pd.notnull(row.get("Appunto_Multiplo", "")) else ""
     
     if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
@@ -410,7 +406,7 @@ def calcola_ore_effettive(row):
             
     return calcola_ore(row.get("Orario Inizio"), row.get("Orario Fine"))
 
-# Funzione per generare il Report PDF raggruppato o in ordine cronologico, perfettamente allineato con le opzioni scelte
+# Funzione per generare il Report PDF raggruppato per Ente e Classe o in Ordine Cronologico
 def genera_pdf_report(df_report, ordina_cronologico=False):
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -437,7 +433,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
-        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#6b7280'))
+        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#b91c1c'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
@@ -448,7 +444,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         
         df_validi = df_report[df_report["Escludi_Conteggio"] != True] if "Escludi_Conteggio" in df_report.columns else df_report
         
-        elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza (Esclusi gli impegni non conteggiati)", subtitle_style))
+        elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza", subtitle_style))
         if not df_validi.empty and "Ente" in df_validi.columns and "Ore" in df_validi.columns:
             df_summary_ente = df_validi.groupby("Ente")["Ore"].sum().reset_index()
             summary_ente_data = [[Paragraph("Ente di Appartenenza", th_style), Paragraph("Ore Totali Parziali", th_style)]]
@@ -524,7 +520,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                         cur_td_style = td_style
                         note_str = str(row.get("Note", ""))
                     else:
-                        ore_str = "0.00h (Escl.)"
+                        ore_str = "0.00h"
                         cur_td_style = td_excl_style
                         note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
 
@@ -537,11 +533,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                         Paragraph(note_str, cur_td_style),
                         Paragraph(ore_str, cur_td_style)
                     ])
-                    
-                    if is_esclusa:
-                        table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                        table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                    
                     row_idx += 1
 
                     appunto_mult = str(row.get("Appunto_Multiplo", ""))
@@ -583,7 +574,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 sub_ore_str = f"{sub['ore']:.2f}h" if sub['ore'] > 0 else ""
                                 cur_sub_style = td_style
                             else:
-                                sub_ore_str = "0.00h (Escl.)"
+                                sub_ore_str = "0.00h"
                                 cur_sub_style = td_excl_style
 
                             det_data.append([
@@ -595,11 +586,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 Paragraph("", cur_sub_style),
                                 Paragraph(sub_ore_str, cur_sub_style)
                             ])
-                            
-                            if is_esclusa:
-                                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                                table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                                
                             row_idx += 1
                 
                 t_det = Table(det_data, colWidths=col_widths)
@@ -674,7 +660,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 cur_td_style = td_style
                                 note_str = str(row.get("Note", ""))
                             else:
-                                ore_str = "0.00h (Escl.)"
+                                ore_str = "0.00h"
                                 cur_td_style = td_excl_style
                                 note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
 
@@ -687,11 +673,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 Paragraph(note_str, cur_td_style),
                                 Paragraph(ore_str, cur_td_style)
                             ])
-                            
-                            if is_esclusa:
-                                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                                table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                                
                             row_idx += 1
                         
                         det_data.append([
@@ -1151,13 +1132,7 @@ with tab1:
                     "Reminder_Minuti": minuti_scelti
                 }
                 
-                dummy_row_for_calc = {
-                    "Escludi_Conteggio": escludi_conteggio_iniziale,
-                    "Appunto_Multiplo": appunto_multiplo,
-                    "Orario Inizio": orario_inizio_str,
-                    "Orario Fine": orario_fine_str
-                }
-                ore_effettive_calcolate = calcola_ore_effettive(dummy_row_for_calc)
+                ore_effettive_calcolate = calcola_ore_effettive(dati_evento)
                 cal_id = sincronizza_google_calendar("crea", dati_evento)
 
                 nuovo_dato = pd.DataFrame({
@@ -1318,16 +1293,12 @@ with tab3:
         def colora_righe_tabella(row):
             row_id = df_mostra.loc[row.name, "ID"]
             svolto = row.get("Svolto", False)
-            escluso = row.get("Escludi_Conteggio", False)
             
             if row_id in ids_sovrapposti:
                 if svolto:
                     base_style = 'background-color: #7f1d1d; color: #ffffff; font-weight: bold; text-decoration: line-through'
                 else:
                     base_style = 'background-color: #dc2626; color: #ffffff; font-weight: bold'
-            elif escluso:
-                # Evidenziato in grigio con barra orizzontale (strikethrough) per indicare che non fa cumulo di ore ma è stato comunque svolto/registrato
-                base_style = 'background-color: #e5e7eb; color: #6b7280; text-decoration: line-through; font-style: italic;'
             elif svolto:
                 base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'
             else:
@@ -1340,7 +1311,7 @@ with tab3:
                     base_style = ''
             
             return [
-                'background-color: #ffffff; color: #000000; text-decoration: none;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
+                'background-color: #ffffff; color: #000000;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
                 for col in row.index
             ]
 
@@ -1371,8 +1342,6 @@ with tab3:
             if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
                 df.loc[idx_orig, "Svolto"] = val_nuovo_svolto
                 df.loc[idx_orig, "Escludi_Conteggio"] = val_nuovo_escluso
-                # Ricalcola le ore della riga modificata
-                df.loc[idx_orig, "Ore"] = calcola_ore_effettive(df.loc[idx_orig])
                 modificato = True
         if modificato:
             salva_dati(df)
@@ -1644,13 +1613,11 @@ with tab3:
                             config["modalita"].append(mod_modalita_libera)
                         salva_config(config)
 
-                        dummy_row_mod = {
-                            "Escludi_Conteggio": mod_escluso,
-                            "Appunto_Multiplo": mod_appunto_multiplo,
+                        mod_ore_calc = calcola_ore_effettive({
                             "Orario Inizio": mod_orario_i_str,
-                            "Orario Fine": mod_orario_f_str
-                        }
-                        mod_ore_calc = calcola_ore_effettive(dummy_row_mod)
+                            "Orario Fine": mod_orario_f_str,
+                            "Appunto_Multiplo": mod_appunto_multiplo
+                        })
 
                         df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
                         df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
@@ -1794,12 +1761,7 @@ with tab3:
 
                 is_overlap = (idx_r in ids_sovrapposti)
 
-                if escluso_card:
-                    # Evidenziato in grigio con barra orizzontale (strikethrough) per indicare che non fa cumulo di ore ma è stato comunque svolto/registrato
-                    bg_color = "#e5e7eb"
-                    border_color = "#9ca3af"
-                    text_style = "color: #6b7280; text-decoration: line-through; font-style: italic;"
-                elif svolto_card:
+                if svolto_card:
                     bg_color = "#2b2b2b"
                     border_color = "#444444"
                     text_style = "color: #7f7f7f; text-decoration: line-through;"
@@ -1821,8 +1783,8 @@ with tab3:
                     text_style = "color: #ffffff;"
 
                 badge_sovr = " | <span style='color: #fca5a5; font-weight: bold;'>[⚠️ SOVRAPPOSIZIONE ORARIA]</span>" if is_overlap else ""
-                badge_escluso = " | <span style='color: #4b5563; font-weight: bold;'>[ESCLUSO DAL CONTEGGIO ORE]</span>" if escluso_card else ""
-                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.1); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
+                badge_escluso = " | <span style='color: #ff9999;'>[Escluso conteggio]</span>" if escluso_card else ""
+                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
 
                 st.markdown(
                     f"""
@@ -2193,14 +2155,8 @@ with tab5:
                     dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
                     
                     for imp in lista_imp:
-                        if imp["escluso"]:
-                            barrato_stile = "text-decoration: line-through; color: #9ca3af; font-style: italic;"
-                        elif imp["svolto"]:
-                            barrato_stile = "text-decoration: line-through; color: #aaa;"
-                        else:
-                            barrato_stile = ""
-
-                        escl_nota = " [Escluso conteggio]" if imp["escluso"] else ""
+                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] else ""
+                        escl_nota = " [Escluso]" if imp["escluso"] else ""
                         dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
                         dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']:.1f}h){escl_nota}<br>"
                         dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
