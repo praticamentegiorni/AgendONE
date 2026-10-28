@@ -72,107 +72,6 @@ st.markdown(
         color: #ffffff !important;
     }
 
-    /* Banner XL al passaggio del mouse */
-    .fc-popover, .fc-tooltip, [data-baseweb="tooltip"], div[role="tooltip"] {
-        font-size: 2.2rem !important;
-        padding: 26px 36px !important;
-        min-width: 450px !important;
-        max-width: 750px !important;
-        border-radius: 16px !important;
-        box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5) !important;
-    }
-
-    .fc-popover-header, .tooltip-title {
-        font-size: 2.6rem !important;
-        font-weight: 900 !important;
-        margin-bottom: 14px !important;
-    }
-
-    .fc-popover-body, .tooltip-inner {
-        font-size: 2.0rem !important;
-        line-height: 1.6 !important;
-    }
-
-    /* Pulsanti Frecce Moderni Carousel */
-    .nav-btn {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: #1e293b;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 10;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .nav-btn:hover {
-      background: #ffffff;
-      transform: translateY(-50%) scale(1.1);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-      color: #2563eb;
-    }
-
-    .nav-btn-prev { left: 16px; }
-    .nav-btn-next { right: 16px; }
-
-    .nav-btn svg {
-      width: 24px;
-      height: 24px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.5;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    /* Banner Popup Ingrandito */
-    .preview-banner {
-      position: absolute;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      width: 85%;
-      max-width: 600px;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(12px);
-      padding: 20px 24px;
-      border-radius: 14px;
-      box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.8);
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      z-index: 20;
-    }
-
-    .carousel-container:hover .preview-banner {
-      opacity: 1;
-      visibility: visible;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    .preview-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin: 0 0 8px 0;
-    }
-
-    .preview-description {
-      font-size: 1.0rem;
-      color: #64748b;
-      margin: 0;
-    }
-
     /* Ridimensionamento colonne data-editor (Orario, Selezione, Svolto, Escludi_Conteggio) */
     div[data-testid="stDataEditor"] th div[title*="Orario"],
     div[data-testid="stDataEditor"] th div[title*="Selezione"],
@@ -214,18 +113,6 @@ st.markdown(
             font-size: 14px !important;
             padding: 8px 12px !important;
             margin-right: 4px !important;
-        }
-
-        .cal-cell {
-            height: 75px !important;
-            padding: 3px !important;
-        }
-        .day-number {
-            font-size: 11px !important;
-        }
-        .badge-impegno, .badge-impegno-multi {
-            font-size: 9px !important;
-            padding: 1px 3px !important;
         }
     }
     </style>
@@ -339,7 +226,6 @@ def trova_sovrapposizioni(df_input):
                 if s2 >= e2:
                     continue
                 
-                # Controllo sovrapposizione intervalli orari
                 if s1 < e2 and s2 < e1:
                     id1 = r1["row_id"]
                     id2 = r2["row_id"]
@@ -383,9 +269,8 @@ def calcola_ore(ora_inizio, ora_fine):
             datetime.datetime.combine(datetime.date.min, t_i.time())).total_seconds() / 3600.0
     return max(0.0, round(diff, 2))
 
-# Calcolo delle ore effettive tenendo conto degli inserimenti multipli
+# Calcolo delle ore effettive (restituisce 0.0 se escluso dal conteggio)
 def calcola_ore_effettive(row):
-    # Se l'appuntamento è escluso dal conteggio, restituisce 0 ore
     if bool(row.get("Escludi_Conteggio", False)):
         return 0.0
 
@@ -410,7 +295,7 @@ def calcola_ore_effettive(row):
             
     return calcola_ore(row.get("Orario Inizio"), row.get("Orario Fine"))
 
-# Funzione per generare il Report PDF raggruppato o in ordine cronologico, perfettamente allineato con le opzioni scelte
+# Funzione per generare il Report PDF raggruppato per Ente e Classe o in Ordine Cronologico
 def genera_pdf_report(df_report, ordina_cronologico=False):
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -437,7 +322,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
-        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#6b7280'))
+        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#9caust') if False else colors.HexColor('#9ca3af'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
@@ -448,7 +333,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         
         df_validi = df_report[df_report["Escludi_Conteggio"] != True] if "Escludi_Conteggio" in df_report.columns else df_report
         
-        elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza (Esclusi gli impegni non conteggiati)", subtitle_style))
+        elements.append(Paragraph("Riepilogo Totale Parziali per Ente di Appartenenza (Esclusi gli elementi non contabilizzati)", subtitle_style))
         if not df_validi.empty and "Ente" in df_validi.columns and "Ore" in df_validi.columns:
             df_summary_ente = df_validi.groupby("Ente")["Ore"].sum().reset_index()
             summary_ente_data = [[Paragraph("Ente di Appartenenza", th_style), Paragraph("Ore Totali Parziali", th_style)]]
@@ -473,7 +358,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
             elements.append(Spacer(1, 10))
 
         if ordina_cronologico:
-            elements.append(Paragraph("Elenco Dettagliato Attività in Ordine Cronologico (Orario di Lavoro)", subtitle_style))
+            elements.append(Paragraph("Elenco Dettagliato Attività in Ordine Cronologico (Gli elementi esclusi dal conteggio appaiono in grigio barrati)", subtitle_style))
             elements.append(Spacer(1, 4))
             
             if not df_report.empty:
@@ -524,7 +409,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                         cur_td_style = td_style
                         note_str = str(row.get("Note", ""))
                     else:
-                        ore_str = "0.00h (Escl.)"
+                        ore_str = "0.00h"
                         cur_td_style = td_excl_style
                         note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
 
@@ -537,70 +422,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                         Paragraph(note_str, cur_td_style),
                         Paragraph(ore_str, cur_td_style)
                     ])
-                    
-                    if is_esclusa:
-                        table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                        table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                    
                     row_idx += 1
-
-                    appunto_mult = str(row.get("Appunto_Multiplo", ""))
-                    if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
-                        sub_items = []
-                        lines = [l.strip() for l in appunto_mult.split("\n") if l.strip()]
-                        for line in lines:
-                            match = time_pattern.match(line)
-                            if match:
-                                start_t = match.group(1)
-                                end_t = match.group(2)
-                                course_name = match.group(3).strip()
-                                
-                                start_t = normalize_time_str(start_t)
-                                end_t = normalize_time_str(end_t)
-
-                                sub_ore = calcola_ore(start_t, end_t)
-                                orario_sub_str = f"{start_t} - {end_t}"
-                                sub_items.append({
-                                    "start_t": start_t,
-                                    "end_t": end_t,
-                                    "orario": orario_sub_str,
-                                    "course": course_name,
-                                    "ore": sub_ore
-                                })
-                            else:
-                                sub_items.append({
-                                    "start_t": "00:00",
-                                    "end_t": "00:00",
-                                    "orario": "",
-                                    "course": line,
-                                    "ore": 0.0
-                                })
-
-                        sub_items = sorted(sub_items, key=lambda x: x["start_t"])
-
-                        for sub in sub_items:
-                            if not is_esclusa:
-                                sub_ore_str = f"{sub['ore']:.2f}h" if sub['ore'] > 0 else ""
-                                cur_sub_style = td_style
-                            else:
-                                sub_ore_str = "0.00h (Escl.)"
-                                cur_sub_style = td_excl_style
-
-                            det_data.append([
-                                Paragraph("", cur_sub_style),
-                                Paragraph(sub["orario"], cur_sub_style),
-                                Paragraph("", cur_sub_style),
-                                Paragraph(sub["course"], cur_sub_style),
-                                Paragraph("", cur_sub_style),
-                                Paragraph("", cur_sub_style),
-                                Paragraph(sub_ore_str, cur_sub_style)
-                            ])
-                            
-                            if is_esclusa:
-                                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                                table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                                
-                            row_idx += 1
                 
                 t_det = Table(det_data, colWidths=col_widths)
                 t_det.setStyle(TableStyle(table_styles))
@@ -674,7 +496,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 cur_td_style = td_style
                                 note_str = str(row.get("Note", ""))
                             else:
-                                ore_str = "0.00h (Escl.)"
+                                ore_str = "0.00h"
                                 cur_td_style = td_excl_style
                                 note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
 
@@ -687,11 +509,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                                 Paragraph(note_str, cur_td_style),
                                 Paragraph(ore_str, cur_td_style)
                             ])
-                            
-                            if is_esclusa:
-                                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e5e7eb')))
-                                table_styles.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')))
-                                
                             row_idx += 1
                         
                         det_data.append([
@@ -727,6 +544,128 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
             ('TOPPADDING', (0,0), (-1,-1), 6),
         ]))
         elements.append(t_tot)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        return None
+
+# Funzione per generare il PDF del Report Ore per Classe (Tab 4)
+def genera_pdf_report_classe(df_res, scuola_nome):
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=landscape(A4), 
+            rightMargin=20, 
+            leftMargin=20, 
+            topMargin=20, 
+            bottomMargin=20
+        )
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor('#1c3d73'), spaceAfter=6)
+        subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#1c3d73'), spaceAfter=4)
+        classe_header_style = ParagraphStyle('ClasseHeaderStyle', parent=styles['Heading3'], fontSize=10, textColor=colors.HexColor('#0f172a'), spaceAfter=3, fontName='Helvetica-Bold')
+        
+        th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
+        td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
+        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#9ca3af'))
+        
+        style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
+        style_subtot_val_classe = ParagraphStyle('SubTotValClasse', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
+
+        elements.append(Paragraph(f"Report Ore per Classe - Scuola: {scuola_nome} - AgendOne", title_style))
+        elements.append(Spacer(1, 6))
+        
+        if df_res.empty:
+            elements.append(Paragraph("Nessuna attività registrata per i criteri selezionati.", subtitle_style))
+        else:
+            col_widths = [80, 100, 120, 300, 50, 52]
+            classi_uniche = sorted(df_res["Classe"].unique().tolist())
+            totale_generale = 0.0
+            
+            for cls in classi_uniche:
+                df_c = df_res[df_res["Classe"] == cls]
+                ore_parziali = df_c[df_c["Escludi_Conteggio"] != True]["Ore"].sum()
+                totale_generale += ore_parziali
+                
+                elements.append(Paragraph(f"Classe / Corso: <b>{cls}</b>", classe_header_style))
+                
+                det_data = [[
+                    Paragraph("Data", th_style),
+                    Paragraph("Orario", th_style),
+                    Paragraph("Sede", th_style),
+                    Paragraph("Note", th_style),
+                    Paragraph("Escluso", th_style),
+                    Paragraph("Ore", th_style)
+                ]]
+                
+                table_styles = [
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+                    ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('TOPPADDING', (0,0), (-1,-1), 4),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f1f5f9')),
+                ]
+                
+                row_idx = 1
+                for _, row in df_c.iterrows():
+                    is_escl = bool(row.get("Escludi_Conteggio", False))
+                    ore_val = float(row.get("Ore", 0.0))
+                    
+                    if not is_escl:
+                        ore_str = f"{ore_val:.2f}h"
+                        cur_style = td_style
+                        escl_str = "No"
+                        note_str = str(row.get("Note", ""))
+                    else:
+                        ore_str = "0.00h"
+                        cur_style = td_excl_style
+                        escl_str = "Sì"
+                        note_str = f"[ESCLUSA DAL CONTEGGIO] {str(row.get('Note', ''))}"
+
+                    det_data.append([
+                        Paragraph(str(row.get("Data", "")), cur_style),
+                        Paragraph(str(row.get("Orario", "")), cur_style),
+                        Paragraph(str(row.get("Sede", "")), cur_style),
+                        Paragraph(note_str, cur_style),
+                        Paragraph(escl_str, cur_style),
+                        Paragraph(ore_str, cur_style)
+                    ])
+                    row_idx += 1
+                
+                det_data.append([
+                    Paragraph(f"<b>Totale parziale ({cls}):</b>", style_subtot_classe),
+                    "", "", "", "",
+                    Paragraph(f"<b>{ore_parziali:.2f}h</b>", style_subtot_val_classe)
+                ])
+                table_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
+                table_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#e6f2ff')))
+                
+                t_det = Table(det_data, colWidths=col_widths)
+                t_det.setStyle(TableStyle(table_styles))
+                elements.append(t_det)
+                elements.append(Spacer(1, 8))
+            
+            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE ({scuola_nome}): {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10))]], colWidths=[802])
+            t_tot.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
+                ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+            ]))
+            elements.append(t_tot)
         
         doc.build(elements)
         buffer.seek(0)
@@ -1148,16 +1087,11 @@ with tab1:
                     "Modalità": val_modalita,
                     "Note": note,
                     "Appunto_Multiplo": appunto_multiplo,
-                    "Reminder_Minuti": minuti_scelti
+                    "Reminder_Minuti": minuti_scelti,
+                    "Escludi_Conteggio": escludi_conteggio_iniziale
                 }
                 
-                dummy_row_for_calc = {
-                    "Escludi_Conteggio": escludi_conteggio_iniziale,
-                    "Appunto_Multiplo": appunto_multiplo,
-                    "Orario Inizio": orario_inizio_str,
-                    "Orario Fine": orario_fine_str
-                }
-                ore_effettive_calcolate = calcola_ore_effettive(dummy_row_for_calc)
+                ore_effettive_calcolate = calcola_ore_effettive(dati_evento)
                 cal_id = sincronizza_google_calendar("crea", dati_evento)
 
                 nuovo_dato = pd.DataFrame({
@@ -1296,7 +1230,6 @@ with tab3:
             cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
             df_vis = df_vis[cols + ["ID_originale"]]
 
-        # Calcolo appuntamenti con sovrapposizione oraria
         ids_sovrapposti, dettagli_sovrapposizioni = trova_sovrapposizioni(df_vis)
 
         if len(ids_sovrapposti) > 0:
@@ -1307,7 +1240,6 @@ with tab3:
         if filtro:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
 
-        # Mantieni lo stato di selezione senza azzerarlo al rerun per conservare la posizione
         df_mostra.insert(0, "Selezione", df_mostra["ID_originale"].isin(st.session_state["selezionati_ids"]))
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
         df_mostra = df_mostra.drop(columns=["ID_originale"])
@@ -1320,27 +1252,26 @@ with tab3:
             svolto = row.get("Svolto", False)
             escluso = row.get("Escludi_Conteggio", False)
             
-            if row_id in ids_sovrapposti:
+            if escluso:
+                base_style = 'background-color: #333333; color: #9ca3af; text-decoration: line-through;'
+            elif row_id in ids_sovrapposti:
                 if svolto:
-                    base_style = 'background-color: #7f1d1d; color: #ffffff; font-weight: bold; text-decoration: line-through'
+                    base_style = 'background-color: #7f1d1d; color: #ffffff; font-weight: bold; text-decoration: line-through;'
                 else:
-                    base_style = 'background-color: #dc2626; color: #ffffff; font-weight: bold'
-            elif escluso:
-                # Evidenziato in grigio con barra orizzontale (strikethrough) per indicare che non fa cumulo di ore ma è stato comunque svolto/registrato
-                base_style = 'background-color: #e5e7eb; color: #6b7280; text-decoration: line-through; font-style: italic;'
+                    base_style = 'background-color: #dc2626; color: #ffffff; font-weight: bold;'
             elif svolto:
-                base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through'
+                base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through;'
             else:
                 mod = str(row.get("Modalità", "")).lower()
                 if "presenza" in mod:
-                    base_style = 'background-color: #1c3d73; color: #ffffff'
+                    base_style = 'background-color: #1c3d73; color: #ffffff;'
                 elif "video" in mod:
-                    base_style = 'background-color: #155c32; color: #ffffff'
+                    base_style = 'background-color: #155c32; color: #ffffff;'
                 else:
                     base_style = ''
             
             return [
-                'background-color: #ffffff; color: #000000; text-decoration: none;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
+                'background-color: #ffffff; color: #000000;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
                 for col in row.index
             ]
 
@@ -1371,7 +1302,6 @@ with tab3:
             if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
                 df.loc[idx_orig, "Svolto"] = val_nuovo_svolto
                 df.loc[idx_orig, "Escludi_Conteggio"] = val_nuovo_escluso
-                # Ricalcola le ore della riga modificata
                 df.loc[idx_orig, "Ore"] = calcola_ore_effettive(df.loc[idx_orig])
                 modificato = True
         if modificato:
@@ -1416,14 +1346,14 @@ with tab3:
                         "Modalità": str(nuova_riga["Modalità"]),
                         "Note": str(nuova_riga["Note"]),
                         "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
-                        "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240))
+                        "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240)),
+                        "Escludi_Conteggio": bool(nuova_riga.get("Escludi_Conteggio", False))
                     }
                     cal_id = sincronizza_google_calendar("crea", dati_evento)
                     nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
                     
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     nuovo_idx = len(df) - 1
-                    # Mantieni selezionato il nuovo appuntamento duplicato per non perdere la posizione
                     st.session_state["selezionati_ids"] = [nuovo_idx]
                     salva_dati(df)
                     st.success("Appuntamento duplicato e aggiunto a Calendar!")
@@ -1644,19 +1574,10 @@ with tab3:
                             config["modalita"].append(mod_modalita_libera)
                         salva_config(config)
 
-                        dummy_row_mod = {
-                            "Escludi_Conteggio": mod_escluso,
-                            "Appunto_Multiplo": mod_appunto_multiplo,
-                            "Orario Inizio": mod_orario_i_str,
-                            "Orario Fine": mod_orario_f_str
-                        }
-                        mod_ore_calc = calcola_ore_effettive(dummy_row_mod)
-
                         df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
                         df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
                         df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
                         df.loc[riga_idx, "Orario Fine"] = mod_orario_f_str
-                        df.loc[riga_idx, "Ore"] = mod_ore_calc
                         df.loc[riga_idx, "Ente"] = val_ente_finale
                         df.loc[riga_idx, "Classe"] = val_classe_finale
                         df.loc[riga_idx, "Sede"] = val_sede_finale
@@ -1666,6 +1587,7 @@ with tab3:
                         df.loc[riga_idx, "Note"] = mod_note
                         df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo
                         df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
+                        df.loc[riga_idx, "Ore"] = calcola_ore_effettive(df.loc[riga_idx])
 
                         dati_evento = {
                             "Data": mod_data.strftime("%Y-%m-%d"),
@@ -1677,7 +1599,8 @@ with tab3:
                             "Modalità": val_modalita_finale,
                             "Note": mod_note,
                             "Appunto_Multiplo": mod_appunto_multiplo,
-                            "Reminder_Minuti": minuti_scelti_mod
+                            "Reminder_Minuti": minuti_scelti_mod,
+                            "Escludi_Conteggio": mod_escluso
                         }
 
                         cal_id_esistente = str(df.loc[riga_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
@@ -1688,7 +1611,6 @@ with tab3:
                             cal_id = sincronizza_google_calendar("crea", dati_evento)
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
-                        # Mantieni attiva la riga modificata
                         st.session_state["selezionati_ids"] = [riga_idx]
                         salva_dati(df)
                         st.success("Modifiche salvate e calendario aggiornato!")
@@ -1795,10 +1717,9 @@ with tab3:
                 is_overlap = (idx_r in ids_sovrapposti)
 
                 if escluso_card:
-                    # Evidenziato in grigio con barra orizzontale (strikethrough) per indicare che non fa cumulo di ore ma è stato comunque svolto/registrato
-                    bg_color = "#e5e7eb"
-                    border_color = "#9ca3af"
-                    text_style = "color: #6b7280; text-decoration: line-through; font-style: italic;"
+                    bg_color = "#333333"
+                    border_color = "#555555"
+                    text_style = "color: #9ca3af; text-decoration: line-through;"
                 elif svolto_card:
                     bg_color = "#2b2b2b"
                     border_color = "#444444"
@@ -1821,8 +1742,8 @@ with tab3:
                     text_style = "color: #ffffff;"
 
                 badge_sovr = " | <span style='color: #fca5a5; font-weight: bold;'>[⚠️ SOVRAPPOSIZIONE ORARIA]</span>" if is_overlap else ""
-                badge_escluso = " | <span style='color: #4b5563; font-weight: bold;'>[ESCLUSO DAL CONTEGGIO ORE]</span>" if escluso_card else ""
-                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.1); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
+                badge_escluso = " | <span style='color: #9ca3af;'>[Escluso conteggio]</span>" if escluso_card else ""
+                multiplo_html = f"<br><em>Testo Multi-impegno:</em> <pre style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; color: inherit; white-space: pre-wrap;'>{appunto_mult}</pre>" if appunto_mult else ""
 
                 st.markdown(
                     f"""
@@ -1902,7 +1823,8 @@ with tab3:
                             "Modalità": str(row.get("Modalità", "")),
                             "Note": str(row.get("Note", "")),
                             "Appunto_Multiplo": str(row.get("Appunto_Multiplo", "")),
-                            "Reminder_Minuti": int(row.get("Reminder_Minuti", 240))
+                            "Reminder_Minuti": int(row.get("Reminder_Minuti", 240)),
+                            "Escludi_Conteggio": bool(row.get("Escludi_Conteggio", False))
                         }
                         nuovo_id = sincronizza_google_calendar("crea", dati_evento)
                         if nuovo_id:
@@ -1926,7 +1848,7 @@ with tab4:
         c_sc1, c_sc2, c_sc3 = st.columns(3)
         with c_sc1:
             enti_disponibili_menu = sorted(df["Ente"].dropna().unique().tolist() if "Ente" in df.columns else [])
-            scuola_selezionata = st.selectbox("Seleziona Scuola (Ente)", options=enti_disponibili_menu)
+            scuola_selezionata = st.selectbox("Seleziona Scuola (Ente)", options=enti_disponibili_menu, key="sel_scuola_cls_tab4")
         with c_sc2:
             data_rif_inizio = st.date_input("Data Inizio Riferimento", value=datetime.date(datetime.date.today().year, 9, 1), format="DD/MM/YYYY", key="rep_classe_inizio")
         with c_sc3:
@@ -1949,12 +1871,10 @@ with tab4:
             time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
 
             for _, row in df_cls.iterrows():
-                if bool(row.get("Escludi_Conteggio", False)):
-                    continue
-                
                 dt_val = row["Data_dt"]
                 data_str = dt_val.strftime("%d/%m/%Y") if pd.notnull(dt_val) else str(row.get("Data", ""))
                 appunto_mult = str(row.get("Appunto_Multiplo", ""))
+                is_escl = bool(row.get("Escludi_Conteggio", False))
                 
                 if appunto_mult and appunto_mult.lower() != "nan" and appunto_mult.strip():
                     lines = [l.strip() for l in appunto_mult.split("\n") if l.strip()]
@@ -1966,7 +1886,7 @@ with tab4:
                             start_t = normalize_time_str(match.group(1))
                             end_t = normalize_time_str(match.group(2))
                             course_name = match.group(3).strip()
-                            ore_sub = calcola_ore(start_t, end_t)
+                            ore_sub = 0.0 if is_escl else calcola_ore(start_t, end_t)
                             
                             righe_report_espandite.append({
                                 "Data_dt": dt_val,
@@ -1975,11 +1895,12 @@ with tab4:
                                 "Orario": f"{start_t} - {end_t}",
                                 "Ore": ore_sub,
                                 "Sede": str(row.get("Sede", "")),
-                                "Note": str(row.get("Note", ""))
+                                "Note": str(row.get("Note", "")),
+                                "Escludi_Conteggio": is_escl
                             })
                     
                     if not has_matched_sub:
-                        ore_princ = float(row.get("Ore", 0.0))
+                        ore_princ = 0.0 if is_escl else float(row.get("Ore", 0.0))
                         righe_report_espandite.append({
                             "Data_dt": dt_val,
                             "Data": data_str,
@@ -1987,10 +1908,11 @@ with tab4:
                             "Orario": f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
                             "Ore": ore_princ,
                             "Sede": str(row.get("Sede", "")),
-                            "Note": str(row.get("Note", ""))
+                            "Note": str(row.get("Note", "")),
+                            "Escludi_Conteggio": is_escl
                         })
                 else:
-                    ore_princ = float(row.get("Ore", 0.0))
+                    ore_princ = 0.0 if is_escl else float(row.get("Ore", 0.0))
                     righe_report_espandite.append({
                         "Data_dt": dt_val,
                         "Data": data_str,
@@ -1998,7 +1920,8 @@ with tab4:
                         "Orario": f"{row.get('Orario Inizio', '')} - {row.get('Orario Fine', '')}",
                         "Ore": ore_princ,
                         "Sede": str(row.get("Sede", "")),
-                        "Note": str(row.get("Note", ""))
+                        "Note": str(row.get("Note", "")),
+                        "Escludi_Conteggio": is_escl
                     })
 
             if not righe_report_espandite:
@@ -2021,19 +1944,19 @@ with tab4:
 
             for cls in classi_uniche:
                 df_c = df_res[df_res["Classe"] == cls]
-                ore_parziali_classe = df_c["Ore"].sum()
+                ore_parziali_classe = df_c[df_c["Escludi_Conteggio"] != True]["Ore"].sum()
                 totale_generale_ore += ore_parziali_classe
 
                 st.markdown(f"#### Classe / Corso: `{cls}` (Parziale: **{ore_parziali_classe:.2f} ore**)")
                 
-                df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Ore"]].copy()
+                df_c_mostra = df_c[["Data", "Orario", "Sede", "Note", "Escludi_Conteggio", "Ore"]].copy()
                 st.dataframe(df_c_mostra, use_container_width=True, hide_index=True)
                 st.markdown("---")
 
-            st.markdown(f"### 🎯 TOTALE GENERALE ORE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
+            st.markdown(f"### 🎯 TOTALE GENERALE ORE VALIDE ({scuola_attuale}): **{totale_generale_ore:.2f} ore**")
 
             st.markdown("##### Esportazione Dati")
-            ce_1, ce_2 = st.columns(2)
+            ce_1, ce_2, ce_3 = st.columns(3)
             
             df_export_cls = df_res.drop(columns=["Data_dt"], errors="ignore")
             
@@ -2064,6 +1987,19 @@ with tab4:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
+
+            with ce_3:
+                pdf_cls_data = genera_pdf_report_classe(df_res, scuola_attuale)
+                if pdf_cls_data:
+                    st.download_button(
+                        label="Scarica Report Classe in PDF",
+                        data=pdf_cls_data,
+                        file_name=f"report_ore_classe_{scuola_attuale.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                else:
+                    st.button("PDF non disponibile", disabled=True, use_container_width=True, help="Installa reportlab per abilitare l'esportazione PDF")
 
 # ================= TAB 5: CALENDARIO =================
 with tab5:
@@ -2113,7 +2049,6 @@ with tab5:
         df_cal["Data_dt"] = df_cal["Data"].apply(parse_data_italiana)
         df_cal["Ore"] = df_cal.apply(calcola_ore_effettive, axis=1)
         
-        # Ordinamento cronologico degli appuntamenti nell'arco della giornata
         df_cal["Orario_Inizio_norm"] = df_cal["Orario Inizio"].apply(normalize_time_str)
         df_cal = df_cal.sort_values(by=["Data_dt", "Orario_Inizio_norm"], ascending=[True, True])
         
@@ -2193,14 +2128,8 @@ with tab5:
                     dettaglio_html += "<hr style='margin: 4px 0; border-color: #444;'>"
                     
                     for imp in lista_imp:
-                        if imp["escluso"]:
-                            barrato_stile = "text-decoration: line-through; color: #9ca3af; font-style: italic;"
-                        elif imp["svolto"]:
-                            barrato_stile = "text-decoration: line-through; color: #aaa;"
-                        else:
-                            barrato_stile = ""
-
-                        escl_nota = " [Escluso conteggio]" if imp["escluso"] else ""
+                        barrato_stile = "text-decoration: line-through; color: #aaa;" if imp["svolto"] or imp["escluso"] else ""
+                        escl_nota = " [Escluso]" if imp["escluso"] else ""
                         dettaglio_html += f"<div style='margin-bottom: 6px; {barrato_stile}'>"
                         dettaglio_html += f"<b>{imp['orario']}</b> ({imp['ore']:.1f}h){escl_nota}<br>"
                         dettaglio_html += f"<b>Ente:</b> {imp['ente']} | <b>Classe:</b> {imp['classe']}<br>"
