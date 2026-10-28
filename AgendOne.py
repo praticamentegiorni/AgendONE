@@ -322,7 +322,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
         
         th_style = ParagraphStyle('TH', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
         td_style = ParagraphStyle('TD', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
-        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#9caust') if False else colors.HexColor('#9ca3af'))
+        td_excl_style = ParagraphStyle('TDExcl', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Oblique', textColor=colors.HexColor('#9ca3af'))
         td_summary_style = ParagraphStyle('TDSummary', parent=styles['Normal'], fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#333333'))
         
         style_subtot_classe = ParagraphStyle('SubTotClasse', parent=styles['Normal'], alignment=2, fontSize=8, fontName='Helvetica-Bold', textColor=colors.HexColor('#2563eb'))
@@ -535,7 +535,7 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                     elements.append(Spacer(1, 8))
         
         totale_generale = df_validi["Ore"].sum() if not df_validi.empty else 0.0
-        t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'), fontSize=10))]], colWidths=[802])
+        t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE: {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10))]], colWidths=[802])
         t_tot.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
             ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
@@ -657,7 +657,18 @@ def genera_pdf_report_classe(df_res, scuola_nome):
                 elements.append(t_det)
                 elements.append(Spacer(1, 8))
             
-            t_tot = Table([[Paragraph(f"<b>TOTALE GENERALE ORE VALIDE ({scuola_nome}): {totale_generale:.2f} h</b>", ParagraphStyle('TotStyle', parent=styles['Normal'], alignment=2, textColor=colors.HexColor('#1c3d73'], fontSize=10))]], colWidths=[802])
+            p_style_tot = ParagraphStyle(
+                'TotStyle',
+                parent=styles['Normal'],
+                alignment=2,
+                textColor=colors.HexColor('#1c3d73'),
+                fontSize=10
+            )
+            p_tot = Paragraph(
+                f"<b>TOTALE GENERALE ORE VALIDE ({scuola_nome}): {totale_generale:.2f} h</b>",
+                p_style_tot
+            )
+            t_tot = Table([[p_tot]], colWidths=[802])
             t_tot.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e2e8f0')),
                 ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
