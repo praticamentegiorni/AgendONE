@@ -396,7 +396,6 @@ def genera_pdf_report(df_report, ordina_cronologico=False):
                     ascending=[True, True, True, True]
                 )
                 
-                time_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*(.*)$")
                 row_idx = 1
                 for _, row in df_sorted.iterrows():
                     parsed_dt = parse_data_italiana(row.get("Data", ""))
@@ -1258,10 +1257,47 @@ with tab3:
         if len(ids_sovrapposti) > 0:
             st.warning(f"⚠️ **Attenzione:** Rilevati **{len(ids_sovrapposti)} appuntamenti** con sovrapposizione di orario. Sono stati evidenziati in **rosso** nella tabella.")
 
-        filtro = st.text_input("Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...")
+        col_ft1, col_ft2 = st.columns([1, 2])
+        with col_ft1:
+            filtro_tempo = st.selectbox(
+                "Filtro Temporale:",
+                options=["Tutti", "Mese Corrente", "Anno Corrente", "Intervallo Personalizzato"],
+                index=0,
+                key="filtro_tempo_tab3"
+            )
+        with col_ft2:
+            filtro_testo = st.text_input("Cerca rapidamente nell'archivio:", placeholder="Filtra per parole chiave...", key="filtro_testo_tab3")
+
+        filtro_data_inizio = None
+        filtro_data_fine = None
+        if filtro_tempo == "Intervallo Personalizzato":
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                filtro_data_inizio = st.date_input("Da Data", value=datetime.date.today().replace(day=1), format="DD/MM/YYYY", key="filtro_d_ini_tab3")
+            with col_d2:
+                filtro_data_fine = st.date_input("A Data", value=datetime.date.today(), format="DD/MM/YYYY", key="filtro_d_fin_tab3")
+
         df_mostra = df_vis.copy()
-        if filtro:
-            df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro, case=False).any(), axis=1)]
+
+        # Applica Filtro Temporale
+        if "Data_dt" in df_mostra.columns:
+            today_dt = datetime.date.today()
+            if filtro_tempo == "Mese Corrente":
+                df_mostra = df_mostra[
+                    (df_mostra["Data_dt"].dt.year == today_dt.year) & 
+                    (df_mostra["Data_dt"].dt.month == today_dt.month)
+                ]
+            elif filtro_tempo == "Anno Corrente":
+                df_mostra = df_mostra[df_mostra["Data_dt"].dt.year == today_dt.year]
+            elif filtro_tempo == "Intervallo Personalizzato":
+                if filtro_data_inizio:
+                    df_mostra = df_mostra[df_mostra["Data_dt"] >= pd.to_datetime(filtro_data_inizio)]
+                if filtro_data_fine:
+                    df_mostra = df_mostra[df_mostra["Data_dt"] <= pd.to_datetime(filtro_data_fine)]
+
+        # Applica Filtro Testo
+        if filtro_testo:
+            df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro_testo, case=False).any(), axis=1)]
 
         df_mostra.insert(0, "Selezione", df_mostra["ID_originale"].isin(st.session_state["selezionati_ids"]))
         df_mostra.insert(1, "ID", df_mostra["ID_originale"])
@@ -1304,6 +1340,7 @@ with tab3:
             df_styled,
             use_container_width=True,
             hide_index=True,
+            key="editor_tab3",
             column_config={
                 "Selezione": st.column_config.CheckboxColumn("Sel.", required=True, width="small"),
                 "Svolto": st.column_config.CheckboxColumn("Svolto", required=True, width="small"),
@@ -1344,6 +1381,8 @@ with tab3:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(righe_selezionate).reset_index(drop=True)
                     st.session_state["selezionati_ids"] = []
+                    if "editor_tab3" in st.session_state:
+                        del st.session_state["editor_tab3"]
                     salva_dati(df)
                     st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
@@ -1378,6 +1417,8 @@ with tab3:
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     nuovo_idx = len(df) - 1
                     st.session_state["selezionati_ids"] = [nuovo_idx]
+                    if "editor_tab3" in st.session_state:
+                        del st.session_state["editor_tab3"]
                     salva_dati(df)
                     st.success("Appuntamento duplicato e aggiunto a Calendar!")
                     st.rerun()
@@ -1421,6 +1462,8 @@ with tab3:
                 with cs1:
                     if st.button("Seleziona tutti i sovrapposti nell'archivio", use_container_width=True):
                         st.session_state["selezionati_ids"] = list(ids_sovrapposti)
+                        if "editor_tab3" in st.session_state:
+                            del st.session_state["editor_tab3"]
                         st.rerun()
                 with cs2:
                     if st.button("Chiudi Dettaglio Sovrapposti", use_container_width=True):
@@ -1635,6 +1678,8 @@ with tab3:
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
                         st.session_state["selezionati_ids"] = [riga_idx]
+                        if "editor_tab3" in st.session_state:
+                            del st.session_state["editor_tab3"]
                         salva_dati(df)
                         st.success("Modifiche salvate e calendario aggiornato!")
                         st.rerun()
