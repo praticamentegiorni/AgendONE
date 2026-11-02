@@ -5,6 +5,7 @@ import os
 import re
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Impostazione pagina
 st.set_page_config(page_title="AgendOne", layout="wide")
@@ -1351,6 +1352,33 @@ with tab3:
             }
         )
 
+        # Riposizionamento automatico dello scroll sulla riga appena duplicata
+        if "target_duplicate_id" in st.session_state:
+            target_id = st.session_state.pop("target_duplicate_id")
+            matches = df_mostra.index[df_mostra["ID"] == target_id].tolist()
+            if matches:
+                row_pos = matches[0]
+                components.html(
+                    f"""
+                    <script>
+                        const doc = window.parent.document;
+                        setTimeout(() => {{
+                            const editor = doc.querySelector('div[data-testid="stDataEditor"]');
+                            if (editor) {{
+                                editor.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+                                const scrollContainers = editor.querySelectorAll('div');
+                                scrollContainers.forEach(el => {{
+                                    if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {{
+                                        el.scrollTop = {row_pos} * 35;
+                                    }}
+                                }});
+                            }}
+                        }}, 250);
+                    </script>
+                    """,
+                    height=0,
+                )
+
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
 
@@ -1417,6 +1445,7 @@ with tab3:
                     df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                     nuovo_idx = len(df) - 1
                     st.session_state["selezionati_ids"] = [nuovo_idx]
+                    st.session_state["target_duplicate_id"] = nuovo_idx
                     if "editor_tab3" in st.session_state:
                         del st.session_state["editor_tab3"]
                     salva_dati(df)
