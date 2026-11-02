@@ -144,7 +144,7 @@ def traduci_mese(mese_en):
 def parse_data_italiana(val):
     if pd.isna(val) or str(val).strip() == "" or str(val).lower() == "none" or str(val).lower() == "nan":
         return pd.NaT
-    val_str = str(val).strip()
+    val_str = str(val).strip().split(" ")[0]
     
     if "-" in val_str and len(val_str.split("-")[0]) == 4:
         try:
@@ -197,7 +197,9 @@ def trova_sovrapposizioni(df_input):
         return ids_sovrapposti, dettagli_sovrapposizioni
         
     df_calc = df_input.copy()
-    if "ID_originale" in df_calc.columns:
+    if "_id_orig" in df_calc.columns:
+        df_calc["row_id"] = df_calc["_id_orig"]
+    elif "ID_originale" in df_calc.columns:
         df_calc["row_id"] = df_calc["ID_originale"]
     elif "ID" in df_calc.columns:
         df_calc["row_id"] = df_calc["ID"]
@@ -944,7 +946,9 @@ def carica_dati():
 # Salvataggio dati su Google Sheets (su Foglio1)
 def salva_dati(df_to_save):
     if "Data_dt" in df_to_save.columns:
-        df_to_save = df_to_save.drop(columns=["Data_dt"])
+        df_to_save = df_to_save.drop(columns=["Data_dt"], errors="ignore")
+    if "_id_orig" in df_to_save.columns:
+        df_to_save = df_to_save.drop(columns=["_id_orig"], errors="ignore")
     cols_standard = ["Data", "Mese", "Orario Inizio", "Orario Fine", "Ore", "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Note", "Appunto_Multiplo", "Codice_Univoco", "Calendar_ID", "Reminder_Minuti"]
     for c in cols_standard:
         if c not in df_to_save.columns:
@@ -1230,19 +1234,16 @@ with tab3:
 
     if not df.empty:
         df_vis = df.copy()
-        df_vis["ID_originale"] = df_vis.index
+        df_vis["_id_orig"] = df_vis.index
         
         if "Data" in df_vis.columns:
             df_vis["Data_dt"] = df_vis["Data"].apply(parse_data_italiana)
             df_vis["Mese"] = df_vis["Data_dt"].apply(lambda dt: traduci_mese(dt.strftime("%B")).capitalize() if pd.notnull(dt) else "")
-            df_vis["Data"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
+            df_vis["Data_display"] = df_vis["Data_dt"].dt.strftime("%d/%m/%Y").fillna(df_vis["Data"])
             
             df_vis["Ore"] = df_vis.apply(calcola_ore_effettive, axis=1)
             df_vis["Orario_Inizio_norm"] = df_vis["Orario Inizio"].apply(normalize_time_str)
             df_vis = df_vis.sort_values(by=["Data_dt", "Orario_Inizio_norm"], ascending=[True, True]).drop(columns=["Orario_Inizio_norm"])
-            
-            cols = ["Data"] + [c for c in df_vis.columns if c not in ["Data", "Data_dt", "ID_originale", "Calendar_ID", "Reminder_Minuti"]]
-            df_vis = df_vis[cols + ["ID_originale"]]
 
         ids_sovrapposti, dettagli_sovrapposizioni = trova_sovrapposizioni(df_vis)
 
@@ -1291,15 +1292,18 @@ with tab3:
         if filtro_testo:
             df_mostra = df_mostra[df_mostra.apply(lambda r: r.astype(str).str.contains(filtro_testo, case=False).any(), axis=1)]
 
-        df_mostra.insert(0, "Selezione", df_mostra["ID_originale"].isin(st.session_state["selezionati_ids"]))
-        df_mostra.insert(1, "ID", df_mostra["ID_originale"])
-        df_mostra = df_mostra.drop(columns=["ID_originale"])
+        df_mostra["Selezione"] = df_mostra["_id_orig"].isin(st.session_state["selezionati_ids"])
+        df_mostra["Data_Mostrata"] = df_mostra["Data_display"]
 
-        colonne_da_nascondere = ["ID", "Codice_Univoco", "Mese"]
-        df_mostra_visibile = df_mostra.drop(columns=[c for c in colonne_da_nascondere if c in df_mostra.columns])
+        colonne_ordinate = [
+            "_id_orig", "Selezione", "Data_Mostrata", "Orario Inizio", "Orario Fine", 
+            "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Ore", "Note"
+        ]
+        colonne_presenti = [c for c in colonne_ordinate if c in df_mostra.columns]
+        df_for_editor = df_mostra[colonne_presenti]
 
         def colora_righe_tabella(row):
-            row_id = df_mostra.loc[row.name, "ID"]
+            row_id = row["_id_orig"]
             svolto = row.get("Svolto", False)
             escluso = row.get("Escludi_Conteggio", False)
             
@@ -1326,7 +1330,7 @@ with tab3:
                 for col in row.index
             ]
 
-        df_styled = df_mostra_visibile.style.apply(colora_righe_tabella, axis=1)
+        df_styled = df_for_editor.style.apply(colora_righe_tabella, axis=1)
 
         df_editato = st.data_editor(
             df_styled,
@@ -1334,9 +1338,11 @@ with tab3:
             hide_index=True,
             key="editor_tab3",
             column_config={
+                "_id_orig": None,
                 "Selezione": st.column_config.CheckboxColumn("Sel.", required=True, width="small"),
                 "Svolto": st.column_config.CheckboxColumn("Svolto", required=True, width="small"),
                 "Escludi_Conteggio": st.column_config.CheckboxColumn("Escludi\nConteggio", required=True, width="small"),
+                "Data_Mostrata": st.column_config.TextColumn("Data", width="small"),
                 "Orario Inizio": st.column_config.TextColumn("Orario\nInizio", width="small"),
                 "Orario Fine": st.column_config.TextColumn("Orario\nFine", width="small"),
                 "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True, width="small"),
@@ -1346,7 +1352,7 @@ with tab3:
         # Riposizionamento automatico dello scroll sulla riga appena duplicata
         if "target_duplicate_id" in st.session_state:
             target_id = st.session_state.pop("target_duplicate_id")
-            matches = df_mostra.index[df_mostra["ID"] == target_id].tolist()
+            matches = df_mostra.index[df_mostra["_id_orig"] == target_id].tolist()
             if matches:
                 row_pos = matches[0]
                 components.html(
@@ -1362,7 +1368,7 @@ with tab3:
                                     if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {{
                                         el.scrollTop = {row_pos} * 35;
                                     }}
-                                me}});
+                                }});
                             }}
                         }}, 250);
                     </script>
@@ -1373,9 +1379,10 @@ with tab3:
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
 
+        # Modifica rapida diretta in tabella per Svolto e Escludi Conteggio
         modificato = False
         for _, riga_ed in df_editato.iterrows():
-            idx_orig = int(riga_ed["ID"]) if "ID" in df_editato.columns else int(df_mostra[df_mostra.index == riga_ed.name]["ID"].values[0])
+            idx_orig = int(riga_ed["_id_orig"])
             val_nuovo_svolto = bool(riga_ed["Svolto"])
             val_nuovo_escluso = bool(riga_ed["Escludi_Conteggio"])
             if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
@@ -1387,7 +1394,7 @@ with tab3:
             salva_dati(df)
             st.rerun()
 
-        righe_selezionate = df_mostra[df_editato["Selezione"] == True]["ID"].tolist() if "Selezione" in df_editato.columns and "ID" in df_mostra.columns else []
+        righe_selezionate = df_editato[df_editato["Selezione"] == True]["_id_orig"].tolist() if "Selezione" in df_editato.columns and "_id_orig" in df_editato.columns else []
         st.session_state["selezionati_ids"] = righe_selezionate
 
         col_act1, col_act2, col_act3 = st.columns(3)
@@ -1398,7 +1405,7 @@ with tab3:
                         cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
                         if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
-                    df = df.drop(righe_selezionate).reset_index(drop=True)
+                    df = df.drop(index=righe_selezionate).reset_index(drop=True)
                     st.session_state["selezionati_ids"] = []
                     if "editor_tab3" in st.session_state:
                         del st.session_state["editor_tab3"]
@@ -1459,7 +1466,7 @@ with tab3:
                 st.success("Nessun appuntamento risulta in sovrapposizione di orario.")
             else:
                 st.info("Di seguito sono elencati tutti gli appuntamenti con sovrapposizione di orario raggruppati per data:")
-                df_sovr_disp = df_vis[df_vis["ID_originale"].isin(ids_sovrapposti)].copy()
+                df_sovr_disp = df_vis[df_vis["_id_orig"].isin(ids_sovrapposti)].copy()
                 
                 for data_val, grp in df_sovr_disp.groupby("Data"):
                     dt_p = parse_data_italiana(data_val)
@@ -1498,21 +1505,22 @@ with tab3:
 
             st.markdown(f"### Modifica Appuntamento (Riga ID {riga_idx})")
             with st.form("form_modifica_multipla"):
-                try:
-                    data_default = datetime.datetime.strptime(str(riga_corrente["Data"]), "%Y-%m-%d").date()
-                except:
+                parsed_dt_corrente = parse_data_italiana(riga_corrente["Data"])
+                if pd.notnull(parsed_dt_corrente):
+                    data_default = parsed_dt_corrente.date()
+                else:
                     data_default = datetime.date.today()
 
                 try:
                     parti_i = str(riga_corrente["Orario Inizio"]).split(":")
                     h_def_i, m_def_i = int(parti_i[0]), int(parti_i[1])
-                except:
+                except Exception:
                     h_def_i, m_def_i = 9, 0
 
                 try:
                     parti_f = str(riga_corrente["Orario Fine"]).split(":")
                     h_def_f, m_def_f = int(parti_f[0]), int(parti_f[1])
-                except:
+                except Exception:
                     h_def_f, m_def_f = 18, 0
 
                 mod_data = st.date_input("Data", value=data_default, format="DD/MM/YYYY")
@@ -1574,7 +1582,7 @@ with tab3:
                 escluso_corrente = bool(riga_corrente["Escludi_Conteggio"]) if "Escludi_Conteggio" in riga_corrente else False
                 mod_escluso = st.checkbox("Escludi dal conteggio ore", value=escluso_corrente)
                 
-                mod_note = st.text_area("Note", value=str(riga_corrente["Note"]))
+                mod_note = st.text_area("Note", value=str(riga_corrente.get("Note", "") or ""))
                 
                 attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
                 is_multiplo = bool(attuale_appunto_multiplo.strip())
@@ -1849,7 +1857,7 @@ with tab3:
         c_exp1, c_exp2, c_exp3, c_exp4 = st.columns(4)
 
         with c_exp1:
-            df_export = df_report.drop(columns=["Data_dt"], errors="ignore")
+            df_export = df_report.drop(columns=["Data_dt", "_id_orig"], errors="ignore")
             csv_data = df_export.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="Scarica Report CSV",
@@ -1861,6 +1869,7 @@ with tab3:
 
         with c_exp2:
             buffer_excel = io.BytesIO()
+            df_export = df_report.drop(columns=["Data_dt", "_id_orig"], errors="ignore")
             with pd.ExcelWriter(buffer_excel, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False, sheet_name='Report')
                 
