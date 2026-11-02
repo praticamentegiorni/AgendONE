@@ -121,6 +121,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Helper per la gestione degli errori Google API (Quota / Rate Limit)
+def gestisci_errore_google(e, contestazione="operazione"):
+    err_str = str(e).lower()
+    if any(k in err_str for k in ["429", "quota", "rate limit", "ratelimit", "resource_exhausted", "too many requests", "user-rate limit", "exceeded"]):
+        st.warning(
+            "⏳ **Troppe richieste inviate alle API di Google (Quota / Rate Limit superato).**\n\n"
+            "Si prega di **attendere circa 10-20 secondi** prima di eseguire altre operazioni o aggiornare la pagina.",
+            icon="⚠️"
+        )
+        return True
+    return False
+
 # Dizionario per i mesi in italiano
 MESI_ITALIANI = {
     "January": "Gennaio",
@@ -724,7 +736,8 @@ def get_gspread_client_and_sheet(nome_foglio="Foglio1"):
         worksheet = spreadsheet.worksheet(nome_foglio)
         return worksheet
     except Exception as e:
-        st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
+        if not gestisci_errore_google(e, "connessione Google Sheets"):
+            st.error(f"Errore durante la connessione a Google Sheets ('{nome_foglio}'): {e}")
         return None
 
 # Funzione per sincronizzare l'evento su Google Calendar
@@ -806,7 +819,8 @@ def sincronizza_google_calendar(azione, dati_evento, evento_id_esistente=None):
                     raise err
             return None
     except Exception as e:
-        st.error(f"Errore di sincronizzazione Google Calendar: {e}")
+        if not gestisci_errore_google(e, "Google Calendar"):
+            st.error(f"Errore di sincronizzazione Google Calendar: {e}")
         return None
 
 # Gestione configurazione tabelle (caricamento e salvataggio dal foglio "Tabelle")
@@ -851,7 +865,8 @@ def carica_config():
             "modalita": modalita
         }
     except Exception as e:
-        st.error(f"Errore durante il caricamento dal foglio 'Tabelle': {e}")
+        if not gestisci_errore_google(e, "caricamento configurazione"):
+            st.error(f"Errore durante il caricamento dal foglio 'Tabelle': {e}")
         return default_config
 
 def salva_config(config):
@@ -881,7 +896,8 @@ def salva_config(config):
         worksheet.clear()
         worksheet.update("A1", rows)
     except Exception as e:
-        st.error(f"Errore durante il salvataggio nel foglio 'Tabelle': {e}")
+        if not gestisci_errore_google(e, "salvataggio configurazione"):
+            st.error(f"Errore durante il salvataggio nel foglio 'Tabelle': {e}")
 
 config = carica_config()
 
@@ -941,6 +957,8 @@ def carica_dati():
                 
         return df
     except Exception as e:
+        if not gestisci_errore_google(e, "caricamento dati"):
+            pass
         return empty_df
 
 # Salvataggio dati su Google Sheets (su Foglio1)
@@ -965,7 +983,8 @@ def salva_dati(df_to_save):
         righe = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
         worksheet.update("A1", righe)
     except Exception as e:
-        st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
+        if not gestisci_errore_google(e, "salvataggio dati"):
+            st.error(f"Errore durante il salvataggio su Google Sheets: {e}")
 
 df = carica_dati()
 
@@ -1232,6 +1251,9 @@ with tab3:
     if "mostra_sovrapposti" not in st.session_state:
         st.session_state["mostra_sovrapposti"] = False
 
+    if "editor_version" not in st.session_state:
+        st.session_state["editor_version"] = 0
+
     if not df.empty:
         df_vis = df.copy()
         df_vis["_id_orig"] = df_vis.index
@@ -1295,57 +1317,32 @@ with tab3:
         df_mostra["Selezione"] = df_mostra["_id_orig"].isin(st.session_state["selezionati_ids"])
         df_mostra["Data_Mostrata"] = df_mostra["Data_display"]
 
+        # Ripristino colonna "Appunto_Multiplo" nella visualizzazione e modifica tabulara
         colonne_ordinate = [
             "_id_orig", "Selezione", "Data_Mostrata", "Orario Inizio", "Orario Fine", 
-            "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Ore", "Note"
+            "Ente", "Classe", "Sede", "Modalità", "Svolto", "Escludi_Conteggio", "Ore", "Note", "Appunto_Multiplo"
         ]
         colonne_presenti = [c for c in colonne_ordinate if c in df_mostra.columns]
-        df_for_editor = df_mostra[colonne_presenti]
+        df_for_editor = df_mostra[colonne_presenti].copy()
 
-        def colora_righe_tabella(row):
-            row_id = row["_id_orig"]
-            svolto = row.get("Svolto", False)
-            escluso = row.get("Escludi_Conteggio", False)
-            
-            if escluso:
-                base_style = 'background-color: #333333; color: #9ca3af; text-decoration: line-through;'
-            elif row_id in ids_sovrapposti:
-                if svolto:
-                    base_style = 'background-color: #7f1d1d; color: #ffffff; font-weight: bold; text-decoration: line-through;'
-                else:
-                    base_style = 'background-color: #dc2626; color: #ffffff; font-weight: bold;'
-            elif svolto:
-                base_style = 'background-color: #2b2b2b; color: #7f7f7f; text-decoration: line-through;'
-            else:
-                mod = str(row.get("Modalità", "")).lower()
-                if "presenza" in mod:
-                    base_style = 'background-color: #1c3d73; color: #ffffff;'
-                elif "video" in mod:
-                    base_style = 'background-color: #155c32; color: #ffffff;'
-                else:
-                    base_style = ''
-            
-            return [
-                'background-color: #ffffff; color: #000000;' if col in ["Selezione", "Svolto", "Escludi_Conteggio"] else base_style
-                for col in row.index
-            ]
-
-        df_styled = df_for_editor.style.apply(colora_righe_tabella, axis=1)
+        editor_key_dinamica = f"editor_tab3_v{st.session_state['editor_version']}"
 
         df_editato = st.data_editor(
-            df_styled,
+            df_for_editor,
             use_container_width=True,
             hide_index=True,
-            key="editor_tab3",
+            key=editor_key_dinamica,
             column_config={
                 "_id_orig": None,
                 "Selezione": st.column_config.CheckboxColumn("Sel.", required=True, width="small"),
                 "Svolto": st.column_config.CheckboxColumn("Svolto", required=True, width="small"),
                 "Escludi_Conteggio": st.column_config.CheckboxColumn("Escludi\nConteggio", required=True, width="small"),
-                "Data_Mostrata": st.column_config.TextColumn("Data", width="small"),
+                "Data_Mostrata": st.column_config.TextColumn("Data", width="small", disabled=True),
                 "Orario Inizio": st.column_config.TextColumn("Orario\nInizio", width="small"),
                 "Orario Fine": st.column_config.TextColumn("Orario\nFine", width="small"),
-                "Ore": st.column_config.NumberColumn(format="%.2f h", disabled=True, width="small"),
+                "Ore": st.column_config.NumberColumn("Ore", format="%.2f h", disabled=True, width="small"),
+                "Appunto_Multiplo": st.column_config.TextColumn("Appunto Multiplo", width="medium"),
+                "Note": st.column_config.TextColumn("Note", width="medium"),
             }
         )
 
@@ -1379,18 +1376,34 @@ with tab3:
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
 
-        # Modifica rapida diretta in tabella per Svolto e Escludi Conteggio
+        # Modifica rapida diretta in tabella per Svolto, Escludi Conteggio, Note e Appunto Multiplo
         modificato = False
         for _, riga_ed in df_editato.iterrows():
             idx_orig = int(riga_ed["_id_orig"])
             val_nuovo_svolto = bool(riga_ed["Svolto"])
             val_nuovo_escluso = bool(riga_ed["Escludi_Conteggio"])
-            if df.loc[idx_orig, "Svolto"] != val_nuovo_svolto or df.loc[idx_orig, "Escludi_Conteggio"] != val_nuovo_escluso:
+            val_nuovo_appunto = str(riga_ed.get("Appunto_Multiplo", "")) if "Appunto_Multiplo" in riga_ed and pd.notnull(riga_ed["Appunto_Multiplo"]) else ""
+            val_nuova_nota = str(riga_ed.get("Note", "")) if "Note" in riga_ed and pd.notnull(riga_ed["Note"]) else ""
+
+            old_svolto = bool(df.loc[idx_orig, "Svolto"])
+            old_escluso = bool(df.loc[idx_orig, "Escludi_Conteggio"])
+            old_appunto = str(df.loc[idx_orig, "Appunto_Multiplo"]) if pd.notnull(df.loc[idx_orig, "Appunto_Multiplo"]) else ""
+            old_nota = str(df.loc[idx_orig, "Note"]) if pd.notnull(df.loc[idx_orig, "Note"]) else ""
+
+            if (old_svolto != val_nuovo_svolto or 
+                old_escluso != val_nuovo_escluso or 
+                old_appunto != val_nuovo_appunto or 
+                old_nota != val_nuova_nota):
+                
                 df.loc[idx_orig, "Svolto"] = val_nuovo_svolto
                 df.loc[idx_orig, "Escludi_Conteggio"] = val_nuovo_escluso
+                df.loc[idx_orig, "Appunto_Multiplo"] = val_nuovo_appunto
+                df.loc[idx_orig, "Note"] = val_nuova_nota
                 df.loc[idx_orig, "Ore"] = calcola_ore_effettive(df.loc[idx_orig])
                 modificato = True
+
         if modificato:
+            st.session_state["editor_version"] += 1
             salva_dati(df)
             st.rerun()
 
@@ -1407,8 +1420,7 @@ with tab3:
                             sincronizza_google_calendar("elimina", {}, cal_id_esistente)
                     df = df.drop(index=righe_selezionate).reset_index(drop=True)
                     st.session_state["selezionati_ids"] = []
-                    if "editor_tab3" in st.session_state:
-                        del st.session_state["editor_tab3"]
+                    st.session_state["editor_version"] += 1
                     salva_dati(df)
                     st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
@@ -1444,8 +1456,7 @@ with tab3:
                     nuovo_idx = len(df) - 1
                     st.session_state["selezionati_ids"] = [nuovo_idx]
                     st.session_state["target_duplicate_id"] = nuovo_idx
-                    if "editor_tab3" in st.session_state:
-                        del st.session_state["editor_tab3"]
+                    st.session_state["editor_version"] += 1
                     salva_dati(df)
                     st.success("Appuntamento duplicato e aggiunto a Calendar!")
                     st.rerun()
@@ -1489,8 +1500,7 @@ with tab3:
                 with cs1:
                     if st.button("Seleziona tutti i sovrapposti nell'archivio", use_container_width=True):
                         st.session_state["selezionati_ids"] = list(ids_sovrapposti)
-                        if "editor_tab3" in st.session_state:
-                            del st.session_state["editor_tab3"]
+                        st.session_state["editor_version"] += 1
                         st.rerun()
                 with cs2:
                     if st.button("Chiudi Dettaglio Sovrapposti", use_container_width=True):
@@ -1584,15 +1594,15 @@ with tab3:
                 
                 mod_note = st.text_area("Note", value=str(riga_corrente.get("Note", "") or ""))
                 
-                attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
-                is_multiplo = bool(attuale_appunto_multiplo.strip())
+                # Ripristino completo e strutturato del campo Appunto Multiplo nella Modifica
+                st.markdown("---")
+                st.markdown("### Appunto Multiplo (Modifica e Configurazione)")
+                st.caption("Puoi inserire o modificare l'appunto multiplo mediante la griglia di orari/classi oppure digitando direttamente il testo.")
 
-                if is_multiplo:
-                    st.markdown("---")
-                    st.markdown("### Appuntamenti Multipli (Modifica)")
-                    st.caption("Modifica le righe dell'appuntamento multiplo.")
-                    
-                    parsed_righe = []
+                attuale_appunto_multiplo = str(riga_corrente.get("Appunto_Multiplo", "")) if pd.notnull(riga_corrente.get("Appunto_Multiplo", "")) else ""
+
+                parsed_righe = []
+                if attuale_appunto_multiplo.strip():
                     for line in attuale_appunto_multiplo.split("\n"):
                         line = line.strip()
                         if not line:
@@ -1610,44 +1620,43 @@ with tab3:
                         except Exception:
                             parsed_righe.append((9, 0, 10, 0, line))
 
-                    mod_righe_multiplo_lista = []
-                    opts_classi_multi = [""] + config.get("classi", [])
-                    for i in range(8):
-                        default_hi, default_mi, default_hf, default_mf, default_text = (9, 0, 10, 0, "")
-                        if i < len(parsed_righe):
-                            default_hi, default_mi, default_hf, default_mf, default_text = parsed_righe[i]
+                mod_righe_multiplo_lista = []
+                opts_classi_multi = [""] + config.get("classi", [])
+                for i in range(8):
+                    default_hi, default_mi, default_hf, default_mf, default_text = (9, 0, 10, 0, "")
+                    if i < len(parsed_righe):
+                        default_hi, default_mi, default_hf, default_mf, default_text = parsed_righe[i]
 
-                        def_class_val = ""
-                        def_text_val = ""
-                        if default_text in config.get("classi", []):
-                            def_class_val = default_text
-                        else:
-                            def_text_val = default_text
+                    def_class_val = ""
+                    def_text_val = ""
+                    if default_text in config.get("classi", []):
+                        def_class_val = default_text
+                    else:
+                        def_text_val = default_text
 
-                        idx_cls = opts_classi_multi.index(def_class_val) if def_class_val in opts_classi_multi else 0
+                    idx_cls = opts_classi_multi.index(def_class_val) if def_class_val in opts_classi_multi else 0
 
-                        rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
-                        with rc1:
-                            m_ora_i = st.selectbox(f"ModDaO{i+1}", options=list(range(0, 24)), index=default_hi if default_hi in range(0, 24) else 0, key=f"mod_m_ora_i_{i}", label_visibility="collapsed")
-                        with rc2:
-                            m_min_i = st.selectbox(f"ModDaM{i+1}", options=list(range(0, 60)), index=default_mi if default_mi in range(0, 60) else 0, key=f"mod_m_min_i_{i}", label_visibility="collapsed")
-                        with rc3:
-                            m_ora_f = st.selectbox(f"ModAO{i+1}", options=list(range(0, 24)), index=default_hf if default_hf in range(0, 24) else 1, key=f"mod_m_ora_f_{i}", label_visibility="collapsed")
-                        with rc4:
-                            m_min_f = st.selectbox(f"ModAM{i+1}", options=list(range(0, 60)), index=default_mf if default_mf in range(0, 60) else 0, key=f"mod_m_min_f_{i}", label_visibility="collapsed")
-                        with rc5_sel:
-                            m_classe_sel = st.selectbox(f"ModClasse{i+1}", options=opts_classi_multi, index=idx_cls, key=f"mod_m_classe_sel_{i}", label_visibility="collapsed")
-                        with rc5_txt:
-                            m_testo_libero = st.text_input(f"ModTesto{i+1}", value=def_text_val, placeholder=f"O testo libero {i+1}...", key=f"mod_m_testo_libero_{i}", label_visibility="collapsed")
-                        
-                        val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
-                        if val_testo_riga:
-                            orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
-                            mod_righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
+                    rc1, rc2, rc3, rc4, rc5_sel, rc5_txt = st.columns([0.45, 0.45, 0.45, 0.45, 2.1, 2.1])
+                    with rc1:
+                        m_ora_i = st.selectbox(f"ModDaO{i+1}", options=list(range(0, 24)), index=default_hi if default_hi in range(0, 24) else 0, key=f"mod_m_ora_i_{i}", label_visibility="collapsed")
+                    with rc2:
+                        m_min_i = st.selectbox(f"ModDaM{i+1}", options=list(range(0, 60)), index=default_mi if default_mi in range(0, 60) else 0, key=f"mod_m_min_i_{i}", label_visibility="collapsed")
+                    with rc3:
+                        m_ora_f = st.selectbox(f"ModAO{i+1}", options=list(range(0, 24)), index=default_hf if default_hf in range(0, 24) else 1, key=f"mod_m_ora_f_{i}", label_visibility="collapsed")
+                    with rc4:
+                        m_min_f = st.selectbox(f"ModAM{i+1}", options=list(range(0, 60)), index=default_mf if default_mf in range(0, 60) else 0, key=f"mod_m_min_f_{i}", label_visibility="collapsed")
+                    with rc5_sel:
+                        m_classe_sel = st.selectbox(f"ModClasse{i+1}", options=opts_classi_multi, index=idx_cls, key=f"mod_m_classe_sel_{i}", label_visibility="collapsed")
+                    with rc5_txt:
+                        m_testo_libero = st.text_input(f"ModTesto{i+1}", value=def_text_val, placeholder=f"O testo libero {i+1}...", key=f"mod_m_testo_libero_{i}", label_visibility="collapsed")
                     
-                    mod_appunto_multiplo = "\n".join(mod_righe_multiplo_lista)
-                else:
-                    mod_appunto_multiplo = st.text_area("Modifica Testo Inserito (Multi-impegno / Nota multipla)", value=attuale_appunto_multiplo, height=120)
+                    val_testo_riga = m_testo_libero.strip() if m_testo_libero.strip() else m_classe_sel
+                    if val_testo_riga:
+                        orario_slot_str = f"{m_ora_i:02d}:{m_min_i:02d}-{m_ora_f:02d}:{m_min_f:02d}"
+                        mod_righe_multiplo_lista.append(f"{orario_slot_str} {val_testo_riga}")
+
+                mod_appunto_grid_str = "\n".join(mod_righe_multiplo_lista)
+                mod_appunto_multiplo_libero = st.text_area("Oppure modifica testo libero Appunto Multiplo:", value=attuale_appunto_multiplo if not mod_appunto_grid_str else mod_appunto_grid_str, height=100)
 
                 if st.form_submit_button("Salva Modifiche", use_container_width=True):
                     if mod_orario_i_str >= mod_orario_f_str:
@@ -1668,6 +1677,8 @@ with tab3:
                             config["modalita"].append(mod_modalita_libera)
                         salva_config(config)
 
+                        mod_appunto_multiplo_finale = mod_appunto_grid_str if mod_appunto_grid_str else mod_appunto_multiplo_libero.strip()
+
                         df.loc[riga_idx, "Data"] = mod_data.strftime("%Y-%m-%d")
                         df.loc[riga_idx, "Mese"] = traduci_mese(mod_data.strftime("%B"))
                         df.loc[riga_idx, "Orario Inizio"] = mod_orario_i_str
@@ -1679,7 +1690,7 @@ with tab3:
                         df.loc[riga_idx, "Svolto"] = mod_svolto
                         df.loc[riga_idx, "Escludi_Conteggio"] = mod_escluso
                         df.loc[riga_idx, "Note"] = mod_note
-                        df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo
+                        df.loc[riga_idx, "Appunto_Multiplo"] = mod_appunto_multiplo_finale
                         df.loc[riga_idx, "Reminder_Minuti"] = minuti_scelti_mod
                         df.loc[riga_idx, "Ore"] = calcola_ore_effettive(df.loc[riga_idx])
 
@@ -1692,7 +1703,7 @@ with tab3:
                             "Sede": val_sede_finale,
                             "Modalità": val_modalita_finale,
                             "Note": mod_note,
-                            "Appunto_Multiplo": mod_appunto_multiplo,
+                            "Appunto_Multiplo": mod_appunto_multiplo_finale,
                             "Reminder_Minuti": minuti_scelti_mod,
                             "Escludi_Conteggio": mod_escluso
                         }
@@ -1706,8 +1717,7 @@ with tab3:
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
                         st.session_state["selezionati_ids"] = [riga_idx]
-                        if "editor_tab3" in st.session_state:
-                            del st.session_state["editor_tab3"]
+                        st.session_state["editor_version"] += 1
                         salva_dati(df)
                         st.success("Modifiche salvate e calendario aggiornato!")
                         st.rerun()
