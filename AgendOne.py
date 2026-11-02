@@ -1346,12 +1346,12 @@ with tab3:
             }
         )
 
-        # Riposizionamento automatico dello scroll sulla riga appena duplicata
-        if "target_duplicate_id" in st.session_state:
-            target_id = st.session_state.pop("target_duplicate_id")
+        # Riposizionamento automatico dello scroll sulla riga appena modificata/duplicata
+        if "target_scroll_id" in st.session_state:
+            target_id = st.session_state.pop("target_scroll_id")
             matches = df_mostra.index[df_mostra["_id_orig"] == target_id].tolist()
             if matches:
-                row_pos = matches[0]
+                row_pos = int(matches[0])
                 components.html(
                     f"""
                     <script>
@@ -1361,13 +1361,15 @@ with tab3:
                             if (editor) {{
                                 editor.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
                                 const scrollContainers = editor.querySelectorAll('div');
+                                let scrolled = false;
                                 scrollContainers.forEach(el => {{
-                                    if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {{
-                                        el.scrollTop = {row_pos} * 35;
+                                    if (!scrolled && el.scrollHeight > el.clientHeight && el.clientHeight > 50) {{
+                                        el.scrollTop = Math.max(0, {row_pos} * 37 - 40);
+                                        scrolled = true;
                                     }}
                                 }});
                             }}
-                        }}, 250);
+                        }}, 400);
                     </script>
                     """,
                     height=0,
@@ -1401,69 +1403,94 @@ with tab3:
                 df.loc[idx_orig, "Note"] = val_nuova_nota
                 df.loc[idx_orig, "Ore"] = calcola_ore_effettive(df.loc[idx_orig])
                 modificato = True
+                st.session_state["target_scroll_id"] = idx_orig
 
         if modificato:
             st.session_state["editor_version"] += 1
             salva_dati(df)
             st.rerun()
 
-        righe_selezionate = df_editato[df_editato["Selezione"] == True]["_id_orig"].tolist() if "Selezione" in df_editato.columns and "_id_orig" in df_editato.columns else []
-        st.session_state["selezionati_ids"] = righe_selezionate
+        # === Gestione selezione robusta ===
+        # Prende la selezione corrente dall'editor; se è vuota ma c'è qualcosa in session_state
+        # (caso tipico dopo remount del data_editor), usa quella di session_state.
+        righe_da_editor = []
+        if "Selezione" in df_editato.columns and "_id_orig" in df_editato.columns:
+            try:
+                righe_da_editor = [int(x) for x in df_editato[df_editato["Selezione"] == True]["_id_orig"].tolist()]
+            except Exception:
+                righe_da_editor = []
+
+        if righe_da_editor:
+            st.session_state["selezionati_ids"] = righe_da_editor
+        elif "selezionati_ids" not in st.session_state:
+            st.session_state["selezionati_ids"] = []
+
+        # Usa sempre la versione più aggiornata disponibile
+        righe_selezionate = st.session_state.get("selezionati_ids", [])
+
+        # Feedback visivo immediato
+        n_sel = len(righe_selezionate)
+        if n_sel > 0:
+            st.caption(f"📌 **{n_sel}** appuntamento/i selezionato/i")
 
         col_act1, col_act2, col_act3 = st.columns(3)
         with col_act1:
-            if st.button("Elimina Selezionati", type="primary", use_container_width=True):
+            if st.button("Elimina Selezionati", type="primary", use_container_width=True, key="btn_elimina_sel"):
                 if righe_selezionate:
-                    for r_idx in righe_selezionate:
-                        cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                        if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
-                            sincronizza_google_calendar("elimina", {}, cal_id_esistente)
-                    df = df.drop(index=righe_selezionate).reset_index(drop=True)
+                    for r_idx in list(righe_selezionate):
+                        if r_idx in df.index:
+                            cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
+                            if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                                sincronizza_google_calendar("elimina", {}, cal_id_esistente)
+                    df = df.drop(index=[i for i in righe_selezionate if i in df.index]).reset_index(drop=True)
                     st.session_state["selezionati_ids"] = []
                     st.session_state["editor_version"] += 1
                     salva_dati(df)
                     st.success("Righe eliminate e rimosse da Calendar!")
                     st.rerun()
                 else:
-                    st.warning("Seleziona almeno un appuntamento da eliminare.")
+                    st.warning("Seleziona almeno un appuntamento da eliminare (spunta la colonna Sel.).")
         with col_act2:
-            if st.button("Duplica Selezionato", use_container_width=True):
+            if st.button("Duplica Selezionato", use_container_width=True, key="btn_duplica_sel"):
                 if len(righe_selezionate) == 1:
                     riga_idx = righe_selezionate[0]
-                    nuova_riga = df.loc[riga_idx].copy()
-                    if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
-                        nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
+                    if riga_idx not in df.index:
+                        st.warning("La riga selezionata non è più disponibile. Seleziona di nuovo.")
                     else:
-                        nuova_riga["Note"] = "Copia"
-                    
-                    dati_evento = {
-                        "Data": str(nuova_riga["Data"]),
-                        "Orario Inizio": str(nuova_riga["Orario Inizio"]),
-                        "Orario Fine": str(nuova_riga["Orario Fine"]),
-                        "Ente": str(nuova_riga.get("Ente", "")),
-                        "Classe": str(nuova_riga["Classe"]),
-                        "Sede": str(nuova_riga["Sede"]),
-                        "Modalità": str(nuova_riga["Modalità"]),
-                        "Note": str(nuova_riga["Note"]),
-                        "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
-                        "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240)),
-                        "Escludi_Conteggio": bool(nuova_riga.get("Escludi_Conteggio", False))
-                    }
-                    cal_id = sincronizza_google_calendar("crea", dati_evento)
-                    nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
-                    
-                    df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
-                    nuovo_idx = len(df) - 1
-                    st.session_state["selezionati_ids"] = [nuovo_idx]
-                    st.session_state["target_duplicate_id"] = nuovo_idx
-                    st.session_state["editor_version"] += 1
-                    salva_dati(df)
-                    st.success("Appuntamento duplicato e aggiunto a Calendar!")
-                    st.rerun()
+                        nuova_riga = df.loc[riga_idx].copy()
+                        if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
+                            nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
+                        else:
+                            nuova_riga["Note"] = "Copia"
+                        
+                        dati_evento = {
+                            "Data": str(nuova_riga["Data"]),
+                            "Orario Inizio": str(nuova_riga["Orario Inizio"]),
+                            "Orario Fine": str(nuova_riga["Orario Fine"]),
+                            "Ente": str(nuova_riga.get("Ente", "")),
+                            "Classe": str(nuova_riga["Classe"]),
+                            "Sede": str(nuova_riga["Sede"]),
+                            "Modalità": str(nuova_riga["Modalità"]),
+                            "Note": str(nuova_riga["Note"]),
+                            "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
+                            "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240)),
+                            "Escludi_Conteggio": bool(nuova_riga.get("Escludi_Conteggio", False))
+                        }
+                        cal_id = sincronizza_google_calendar("crea", dati_evento)
+                        nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
+                        
+                        df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
+                        nuovo_idx = len(df) - 1
+                        st.session_state["selezionati_ids"] = [nuovo_idx]
+                        st.session_state["target_scroll_id"] = nuovo_idx
+                        st.session_state["editor_version"] += 1
+                        salva_dati(df)
+                        st.success("Appuntamento duplicato e aggiunto a Calendar!")
+                        st.rerun()
                 elif len(righe_selezionate) > 1:
-                    st.warning("Seleziona un solo appuntamento alla volta per la duplicazione rapida.")
+                    st.warning("Seleziona **un solo** appuntamento alla volta per la duplicazione.")
                 else:
-                    st.warning("Seleziona un appuntamento da duplicare.")
+                    st.warning("Seleziona un appuntamento da duplicare (spunta la colonna Sel.).")
         with col_act3:
             lbl_sovr = f"Lista appuntamenti sovrapposti ({len(ids_sovrapposti)})" if ids_sovrapposti else "Lista appuntamenti sovrapposti"
             if st.button(lbl_sovr, use_container_width=True):
@@ -1717,6 +1744,7 @@ with tab3:
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
                         st.session_state["selezionati_ids"] = [riga_idx]
+                        st.session_state["target_scroll_id"] = riga_idx
                         st.session_state["editor_version"] += 1
                         salva_dati(df)
                         st.success("Modifiche salvate e calendario aggiornato!")
