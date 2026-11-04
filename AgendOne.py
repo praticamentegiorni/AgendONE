@@ -988,7 +988,10 @@ def salva_dati(df_to_save):
 
 df = carica_dati()
 
+VERSIONE = "3.13"
+
 st.title("Gestione Orari e Classi - AgendOne")
+st.caption(f"Versione {VERSIONE}")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -1292,13 +1295,19 @@ with tab3:
                 }
                 cal_id = sincronizza_google_calendar("crea", dati_evento)
                 nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
+                # Nuovo codice univoco per la copia (serve per lo scroll stabile)
+                now_ts = datetime.datetime.now()
+                nuovo_codice = str(nuova_riga.get("Data", "")).replace("-", "")[:8] + now_ts.strftime("%H%M%S")
+                if len(nuovo_codice) < 10:
+                    nuovo_codice = now_ts.strftime("%d%m%Y%H%M%S")
+                nuova_riga["Codice_Univoco"] = nuovo_codice
                 df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
                 nuovo_idx = len(df) - 1
                 st.session_state["selezionati_ids"] = [nuovo_idx]
-                st.session_state["target_scroll_id"] = nuovo_idx
+                st.session_state["target_scroll_key"] = nuovo_codice
                 st.session_state["editor_version"] += 1
                 salva_dati(df)
-                st.session_state["banner_successo"] = f"Appuntamento duplicato con successo (nuova riga ID {nuovo_idx}) e sincronizzato con Google Calendar."
+                st.session_state["banner_successo"] = f"Appuntamento duplicato con successo e sincronizzato con Google Calendar."
                 st.rerun()
             else:
                 st.session_state["banner_errore"] = "La riga selezionata non è più disponibile. Seleziona di nuovo."
@@ -1422,33 +1431,62 @@ with tab3:
         )
 
         # Riposizionamento automatico dello scroll sulla riga appena modificata/duplicata
-        if "target_scroll_id" in st.session_state:
-            target_id = st.session_state.pop("target_scroll_id")
-            matches = df_mostra.index[df_mostra["_id_orig"] == target_id].tolist()
-            if matches:
-                row_pos = int(matches[0])
+        # Usa Codice_Univoco (stabile) invece dell'indice numerico che cambia dopo ordinamento/ricaricamento
+        if "target_scroll_key" in st.session_state:
+            target_key = st.session_state.pop("target_scroll_key")
+            row_pos = None
+            if target_key and "Codice_Univoco" in df_mostra.columns:
+                matches = df_mostra.index[df_mostra["Codice_Univoco"].astype(str) == str(target_key)].tolist()
+                if matches:
+                    # posizione all'interno della vista filtrata/ordinata corrente
+                    row_pos = list(df_mostra.index).index(matches[0]) if matches[0] in df_mostra.index else matches[0]
+            if row_pos is None and "target_scroll_id" in st.session_state:
+                # fallback legacy
+                target_id = st.session_state.pop("target_scroll_id")
+                matches = df_mostra.index[df_mostra["_id_orig"] == target_id].tolist()
+                if matches:
+                    row_pos = list(df_mostra.index).index(matches[0]) if matches[0] in df_mostra.index else int(matches[0])
+            if row_pos is not None:
                 components.html(
                     f"""
                     <script>
-                        const doc = window.parent.document;
-                        setTimeout(() => {{
-                            const editor = doc.querySelector('div[data-testid="stDataEditor"]');
-                            if (editor) {{
-                                editor.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
-                                const scrollContainers = editor.querySelectorAll('div');
-                                let scrolled = false;
-                                scrollContainers.forEach(el => {{
-                                    if (!scrolled && el.scrollHeight > el.clientHeight && el.clientHeight > 50) {{
-                                        el.scrollTop = Math.max(0, {row_pos} * 37 - 40);
-                                        scrolled = true;
+                        (function() {{
+                            const rowPos = {int(row_pos)};
+                            const attempts = [250, 550, 900, 1400, 2000];
+                            function doScroll() {{
+                                try {{
+                                    const doc = window.parent.document;
+                                    const editor = doc.querySelector('div[data-testid="stDataEditor"]');
+                                    if (!editor) return;
+                                    const candidates = editor.querySelectorAll('div');
+                                    let best = null;
+                                    let bestScore = 0;
+                                    candidates.forEach(el => {{
+                                        const sh = el.scrollHeight || 0;
+                                        const ch = el.clientHeight || 0;
+                                        if (sh > ch + 30 && ch > 80) {{
+                                            const score = sh - ch;
+                                            if (score > bestScore) {{
+                                                bestScore = score;
+                                                best = el;
+                                            }}
+                                        }}
+                                    }});
+                                    if (best) {{
+                                        const target = Math.max(0, rowPos * 38 - 50);
+                                        best.scrollTop = target;
                                     }}
-                                }});
+                                }} catch (e) {{}}
                             }}
-                        }}, 400);
+                            attempts.forEach(t => setTimeout(doScroll, t));
+                        }})();
                     </script>
                     """,
                     height=0,
                 )
+            # pulizia eventuale residuo
+            if "target_scroll_id" in st.session_state:
+                del st.session_state["target_scroll_id"]
 
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
@@ -1478,7 +1516,12 @@ with tab3:
                 df.loc[idx_orig, "Note"] = val_nuova_nota
                 df.loc[idx_orig, "Ore"] = calcola_ore_effettive(df.loc[idx_orig])
                 modificato = True
-                st.session_state["target_scroll_id"] = idx_orig
+                # Usa Codice_Univoco se disponibile per scroll stabile
+                cod = str(df.loc[idx_orig].get("Codice_Univoco", "")) if "Codice_Univoco" in df.columns else ""
+                if cod and cod.lower() not in ["nan", "none", ""]:
+                    st.session_state["target_scroll_key"] = cod
+                else:
+                    st.session_state["target_scroll_id"] = idx_orig
 
         if modificato:
             st.session_state["editor_version"] += 1
@@ -1779,10 +1822,15 @@ with tab3:
                             df.loc[riga_idx, "Calendar_ID"] = str(cal_id) if cal_id else ""
 
                         st.session_state["selezionati_ids"] = [riga_idx]
-                        st.session_state["target_scroll_id"] = riga_idx
+                        # Usa Codice_Univoco per scroll stabile dopo il ricaricamento
+                        cod = str(df.loc[riga_idx].get("Codice_Univoco", "")) if "Codice_Univoco" in df.columns else ""
+                        if cod and cod.lower() not in ["nan", "none", ""]:
+                            st.session_state["target_scroll_key"] = cod
+                        else:
+                            st.session_state["target_scroll_id"] = riga_idx
                         st.session_state["editor_version"] += 1
                         salva_dati(df)
-                        st.session_state["banner_successo"] = f"Modifiche all'appuntamento (ID {riga_idx}) salvate e sincronizzate con Google Calendar."
+                        st.session_state["banner_successo"] = f"Modifiche all'appuntamento salvate e sincronizzate con Google Calendar."
                         st.rerun()
 
         st.markdown("---")
