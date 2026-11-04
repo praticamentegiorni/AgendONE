@@ -988,7 +988,7 @@ def salva_dati(df_to_save):
 
 df = carica_dati()
 
-VERSIONE = "3.13"
+VERSIONE = "3.14"
 
 st.title("Gestione Orari e Classi - AgendOne")
 st.caption(f"Versione {VERSIONE}")
@@ -1401,6 +1401,31 @@ with tab3:
         df_mostra["Selezione"] = df_mostra["_id_orig"].isin(st.session_state["selezionati_ids"])
         df_mostra["Data_Mostrata"] = df_mostra["Data_display"]
 
+        # --- Porta in cima la riga appena modificata/duplicata (metodo affidabile) ---
+        # Lo scroll interno del data_editor di Streamlit non è affidabile; portiamo la riga in testa.
+        riga_in_evidenza = False
+        if "target_scroll_key" in st.session_state and st.session_state["target_scroll_key"]:
+            target_key = str(st.session_state["target_scroll_key"])
+            if "Codice_Univoco" in df_mostra.columns and not df_mostra.empty:
+                mask_target = df_mostra["Codice_Univoco"].astype(str) == target_key
+                if mask_target.any():
+                    # Metti la riga target per prima, le altre dopo (ordine originale)
+                    df_target = df_mostra[mask_target]
+                    df_altre = df_mostra[~mask_target]
+                    df_mostra = pd.concat([df_target, df_altre], ignore_index=False)
+                    riga_in_evidenza = True
+
+        if riga_in_evidenza:
+            st.info(
+                "📍 **Riga appena modificata/duplicata portata in cima alla lista** per facilitarne il controllo. "
+                "Clicca il pulsante qui sotto per tornare all’ordine cronologico normale."
+            )
+            if st.button("↩ Torna all’ordine cronologico normale", key="btn_ripristina_ordine"):
+                st.session_state["target_scroll_key"] = None
+                if "target_scroll_id" in st.session_state:
+                    del st.session_state["target_scroll_id"]
+                st.rerun()
+
         # Ripristino colonna "Appunto_Multiplo" nella visualizzazione e modifica tabulara
         colonne_ordinate = [
             "_id_orig", "Selezione", "Data_Mostrata", "Orario Inizio", "Orario Fine", 
@@ -1429,64 +1454,6 @@ with tab3:
                 "Note": st.column_config.TextColumn("Note", width="medium"),
             }
         )
-
-        # Riposizionamento automatico dello scroll sulla riga appena modificata/duplicata
-        # Usa Codice_Univoco (stabile) invece dell'indice numerico che cambia dopo ordinamento/ricaricamento
-        if "target_scroll_key" in st.session_state:
-            target_key = st.session_state.pop("target_scroll_key")
-            row_pos = None
-            if target_key and "Codice_Univoco" in df_mostra.columns:
-                matches = df_mostra.index[df_mostra["Codice_Univoco"].astype(str) == str(target_key)].tolist()
-                if matches:
-                    # posizione all'interno della vista filtrata/ordinata corrente
-                    row_pos = list(df_mostra.index).index(matches[0]) if matches[0] in df_mostra.index else matches[0]
-            if row_pos is None and "target_scroll_id" in st.session_state:
-                # fallback legacy
-                target_id = st.session_state.pop("target_scroll_id")
-                matches = df_mostra.index[df_mostra["_id_orig"] == target_id].tolist()
-                if matches:
-                    row_pos = list(df_mostra.index).index(matches[0]) if matches[0] in df_mostra.index else int(matches[0])
-            if row_pos is not None:
-                components.html(
-                    f"""
-                    <script>
-                        (function() {{
-                            const rowPos = {int(row_pos)};
-                            const attempts = [250, 550, 900, 1400, 2000];
-                            function doScroll() {{
-                                try {{
-                                    const doc = window.parent.document;
-                                    const editor = doc.querySelector('div[data-testid="stDataEditor"]');
-                                    if (!editor) return;
-                                    const candidates = editor.querySelectorAll('div');
-                                    let best = null;
-                                    let bestScore = 0;
-                                    candidates.forEach(el => {{
-                                        const sh = el.scrollHeight || 0;
-                                        const ch = el.clientHeight || 0;
-                                        if (sh > ch + 30 && ch > 80) {{
-                                            const score = sh - ch;
-                                            if (score > bestScore) {{
-                                                bestScore = score;
-                                                best = el;
-                                            }}
-                                        }}
-                                    }});
-                                    if (best) {{
-                                        const target = Math.max(0, rowPos * 38 - 50);
-                                        best.scrollTop = target;
-                                    }}
-                                }} catch (e) {{}}
-                            }}
-                            attempts.forEach(t => setTimeout(doScroll, t));
-                        }})();
-                    </script>
-                    """,
-                    height=0,
-                )
-            # pulizia eventuale residuo
-            if "target_scroll_id" in st.session_state:
-                del st.session_state["target_scroll_id"]
 
         ore_totali_archivio = df_mostra[df_mostra["Escludi_Conteggio"] != True]["Ore"].sum() if "Ore" in df_mostra.columns else 0.0
         st.info(f"**Totale ore (visualizzate in archivio, escluse quelle flaggate):** {ore_totali_archivio:.2f} ore")
