@@ -1254,6 +1254,81 @@ with tab3:
     if "editor_version" not in st.session_state:
         st.session_state["editor_version"] = 0
 
+    # ---- Banner di feedback azioni ----
+    if "banner_successo" in st.session_state and st.session_state["banner_successo"]:
+        st.success(st.session_state["banner_successo"], icon="✅")
+        st.session_state["banner_successo"] = None
+
+    if "banner_errore" in st.session_state and st.session_state["banner_errore"]:
+        st.error(st.session_state["banner_errore"])
+        st.session_state["banner_errore"] = None
+
+    # ---- Esecuzione azioni in sospeso (pattern flag - risolve i doppi click) ----
+    # Le azioni vengono eseguite QUI, all'inizio del tab, su uno stato pulito.
+    if st.session_state.get("pending_action") == "duplica":
+        ids_da_usare = st.session_state.get("pending_ids", [])
+        st.session_state["pending_action"] = None
+        st.session_state["pending_ids"] = []
+        if len(ids_da_usare) == 1:
+            riga_idx = ids_da_usare[0]
+            if riga_idx in df.index:
+                nuova_riga = df.loc[riga_idx].copy()
+                if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
+                    nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
+                else:
+                    nuova_riga["Note"] = "Copia"
+                dati_evento = {
+                    "Data": str(nuova_riga["Data"]),
+                    "Orario Inizio": str(nuova_riga["Orario Inizio"]),
+                    "Orario Fine": str(nuova_riga["Orario Fine"]),
+                    "Ente": str(nuova_riga.get("Ente", "")),
+                    "Classe": str(nuova_riga["Classe"]),
+                    "Sede": str(nuova_riga["Sede"]),
+                    "Modalità": str(nuova_riga["Modalità"]),
+                    "Note": str(nuova_riga["Note"]),
+                    "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
+                    "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240)),
+                    "Escludi_Conteggio": bool(nuova_riga.get("Escludi_Conteggio", False))
+                }
+                cal_id = sincronizza_google_calendar("crea", dati_evento)
+                nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
+                df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
+                nuovo_idx = len(df) - 1
+                st.session_state["selezionati_ids"] = [nuovo_idx]
+                st.session_state["target_scroll_id"] = nuovo_idx
+                st.session_state["editor_version"] += 1
+                salva_dati(df)
+                st.session_state["banner_successo"] = f"Appuntamento duplicato con successo (nuova riga ID {nuovo_idx}) e sincronizzato con Google Calendar."
+                st.rerun()
+            else:
+                st.session_state["banner_errore"] = "La riga selezionata non è più disponibile. Seleziona di nuovo."
+                st.rerun()
+        else:
+            st.session_state["banner_errore"] = "Per duplicare seleziona esattamente 1 appuntamento."
+            st.rerun()
+
+    if st.session_state.get("pending_action") == "elimina":
+        ids_da_usare = st.session_state.get("pending_ids", [])
+        st.session_state["pending_action"] = None
+        st.session_state["pending_ids"] = []
+        if ids_da_usare:
+            eliminati = 0
+            for r_idx in list(ids_da_usare):
+                if r_idx in df.index:
+                    cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
+                    if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
+                        sincronizza_google_calendar("elimina", {}, cal_id_esistente)
+                    eliminati += 1
+            df = df.drop(index=[i for i in ids_da_usare if i in df.index]).reset_index(drop=True)
+            st.session_state["selezionati_ids"] = []
+            st.session_state["editor_version"] += 1
+            salva_dati(df)
+            st.session_state["banner_successo"] = f"Eliminate {eliminati} riga/e e rimosse da Google Calendar."
+            st.rerun()
+        else:
+            st.session_state["banner_errore"] = "Nessuna riga selezionata da eliminare."
+            st.rerun()
+
     if not df.empty:
         df_vis = df.copy()
         df_vis["_id_orig"] = df_vis.index
@@ -1408,11 +1483,10 @@ with tab3:
         if modificato:
             st.session_state["editor_version"] += 1
             salva_dati(df)
+            st.session_state["banner_successo"] = "Modifiche rapide (Svolto / Escludi / Note / Appunto Multiplo) salvate."
             st.rerun()
 
         # === Gestione selezione robusta ===
-        # Prende la selezione corrente dall'editor; se è vuota ma c'è qualcosa in session_state
-        # (caso tipico dopo remount del data_editor), usa quella di session_state.
         righe_da_editor = []
         if "Selezione" in df_editato.columns and "_id_orig" in df_editato.columns:
             try:
@@ -1425,72 +1499,33 @@ with tab3:
         elif "selezionati_ids" not in st.session_state:
             st.session_state["selezionati_ids"] = []
 
-        # Usa sempre la versione più aggiornata disponibile
         righe_selezionate = st.session_state.get("selezionati_ids", [])
 
-        # Feedback visivo immediato
         n_sel = len(righe_selezionate)
         if n_sel > 0:
             st.caption(f"📌 **{n_sel}** appuntamento/i selezionato/i")
 
+        # I pulsanti impostano solo un flag: l'azione viene eseguita all'inizio del tab
+        # (questo elimina i problemi di doppio/triplo click)
         col_act1, col_act2, col_act3 = st.columns(3)
         with col_act1:
             if st.button("Elimina Selezionati", type="primary", use_container_width=True, key="btn_elimina_sel"):
                 if righe_selezionate:
-                    for r_idx in list(righe_selezionate):
-                        if r_idx in df.index:
-                            cal_id_esistente = str(df.loc[r_idx, "Calendar_ID"]) if "Calendar_ID" in df.columns else ""
-                            if cal_id_esistente and cal_id_esistente.lower() not in ["nan", "none", ""]:
-                                sincronizza_google_calendar("elimina", {}, cal_id_esistente)
-                    df = df.drop(index=[i for i in righe_selezionate if i in df.index]).reset_index(drop=True)
-                    st.session_state["selezionati_ids"] = []
-                    st.session_state["editor_version"] += 1
-                    salva_dati(df)
-                    st.success("Righe eliminate e rimosse da Calendar!")
+                    st.session_state["pending_action"] = "elimina"
+                    st.session_state["pending_ids"] = list(righe_selezionate)
                     st.rerun()
                 else:
-                    st.warning("Seleziona almeno un appuntamento da eliminare (spunta la colonna Sel.).")
+                    st.warning("Seleziona almeno un appuntamento da eliminare (spunta la colonna **Sel.**).")
         with col_act2:
             if st.button("Duplica Selezionato", use_container_width=True, key="btn_duplica_sel"):
                 if len(righe_selezionate) == 1:
-                    riga_idx = righe_selezionate[0]
-                    if riga_idx not in df.index:
-                        st.warning("La riga selezionata non è più disponibile. Seleziona di nuovo.")
-                    else:
-                        nuova_riga = df.loc[riga_idx].copy()
-                        if "Note" in nuova_riga and pd.notnull(nuova_riga["Note"]) and str(nuova_riga["Note"]).strip() != "":
-                            nuova_riga["Note"] = str(nuova_riga["Note"]) + " (Copia)"
-                        else:
-                            nuova_riga["Note"] = "Copia"
-                        
-                        dati_evento = {
-                            "Data": str(nuova_riga["Data"]),
-                            "Orario Inizio": str(nuova_riga["Orario Inizio"]),
-                            "Orario Fine": str(nuova_riga["Orario Fine"]),
-                            "Ente": str(nuova_riga.get("Ente", "")),
-                            "Classe": str(nuova_riga["Classe"]),
-                            "Sede": str(nuova_riga["Sede"]),
-                            "Modalità": str(nuova_riga["Modalità"]),
-                            "Note": str(nuova_riga["Note"]),
-                            "Appunto_Multiplo": str(nuova_riga.get("Appunto_Multiplo", "")),
-                            "Reminder_Minuti": int(nuova_riga.get("Reminder_Minuti", 240)),
-                            "Escludi_Conteggio": bool(nuova_riga.get("Escludi_Conteggio", False))
-                        }
-                        cal_id = sincronizza_google_calendar("crea", dati_evento)
-                        nuova_riga["Calendar_ID"] = str(cal_id) if cal_id else ""
-                        
-                        df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
-                        nuovo_idx = len(df) - 1
-                        st.session_state["selezionati_ids"] = [nuovo_idx]
-                        st.session_state["target_scroll_id"] = nuovo_idx
-                        st.session_state["editor_version"] += 1
-                        salva_dati(df)
-                        st.success("Appuntamento duplicato e aggiunto a Calendar!")
-                        st.rerun()
+                    st.session_state["pending_action"] = "duplica"
+                    st.session_state["pending_ids"] = list(righe_selezionate)
+                    st.rerun()
                 elif len(righe_selezionate) > 1:
                     st.warning("Seleziona **un solo** appuntamento alla volta per la duplicazione.")
                 else:
-                    st.warning("Seleziona un appuntamento da duplicare (spunta la colonna Sel.).")
+                    st.warning("Seleziona un appuntamento da duplicare (spunta la colonna **Sel.**).")
         with col_act3:
             lbl_sovr = f"Lista appuntamenti sovrapposti ({len(ids_sovrapposti)})" if ids_sovrapposti else "Lista appuntamenti sovrapposti"
             if st.button(lbl_sovr, use_container_width=True):
@@ -1747,7 +1782,7 @@ with tab3:
                         st.session_state["target_scroll_id"] = riga_idx
                         st.session_state["editor_version"] += 1
                         salva_dati(df)
-                        st.success("Modifiche salvate e calendario aggiornato!")
+                        st.session_state["banner_successo"] = f"Modifiche all'appuntamento (ID {riga_idx}) salvate e sincronizzate con Google Calendar."
                         st.rerun()
 
         st.markdown("---")
